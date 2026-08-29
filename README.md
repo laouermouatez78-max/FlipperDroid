@@ -1,58 +1,101 @@
-# FlipperDroid V2
+# FlipperDroid V3
 
-FlipperDroid V2 is an Android security and hardware diagnostics toolkit written in Kotlin and Jetpack Compose.
+FlipperDroid V3 is an Android cybersecurity, radio and hardware diagnostics toolkit written in Kotlin and Jetpack Compose.
 
-This fork is based on the open-source **FlipperDroid** project by **Jeremiznoo** and keeps the upstream attribution and license terms.
-
-## V2 goals
-
-V2 focuses on a cleaner, safer and more maintainable baseline:
-
-- modernized home screen and navigation;
-- Android 7+ compatibility path (`minSdk 24`);
-- reduced Android permissions;
-- NFC reading, history and real local export;
-- defensive network diagnostics (Ping, DNS and route checks);
-- infrared support for compatible devices;
-- local password generator;
-- device capability/status screen;
-- light/dark theme settings;
-- high-risk experimental modules are not exposed from the main V2 navigation.
+This fork is based on the open-source **FlipperDroid** project by **Jeremiznoo** and keeps the upstream attribution and MIT license terms.
 
 ## Version
 
-- `versionCode`: **2**
-- `versionName`: **2.0.0**
+- `versionCode`: **3**
+- `versionName`: **3.0.0**
+- `minSdk`: **24** (Android 7+)
+- `targetSdk`: **35**
 
-## Main V2 screens
+## What V3 restores and improves
 
-- **NFC Reader** — inspect compatible tags, keep scan history and export scan data.
-- **Network Diagnostics** — basic connectivity and name-resolution checks.
-- **Infrared** — use supported consumer IR hardware with devices you own.
-- **Password Generator** — generate passwords locally on-device.
-- **Device Status** — check Android, NFC, IR and network availability.
-- **Settings** — application and theme preferences.
-- **About V2** — version, credits and safety model.
+V3 brings the major historical modules back into one dashboard while modernizing Android permissions, navigation, diagnostics and safety defaults.
 
-## Build
+### NFC / RFID
+
+- NFC UID and technology inspection;
+- NDEF metadata inspection;
+- scan history and local export;
+- MIFARE Classic memory reading only after an explicit authorization confirmation;
+- metadata-first behavior instead of automatically dumping memory whenever a tag is presented.
+
+### Bluetooth LE
+
+- passive BLE scanner with name, address, RSSI, connectability and advertised service UUIDs;
+- Apple/Samsung legacy advertisement-profile catalogue;
+- controlled BLE Lab simulator with selectable profiles and a transmission-preview log.
+
+The historical continuous BLE-spam engine is not used by V3; BLE Lab simulates the profile rotation locally so nearby devices are not flooded.
+
+### Wi-Fi
+
+- nearby network inventory;
+- SSID/BSSID, RSSI, channel and frequency;
+- WPA/WPA2/WPA3/WEP/open-network classification;
+- security posture findings;
+- Android 13+ `NEARBY_WIFI_DEVICES` permission support;
+- cached-result handling when Android throttles active scans.
+
+The historical `WifiDeauther` source name is retained for compatibility, but the V3 module is a defensive Wi-Fi audit tool and does not transmit deauthentication frames.
+
+### Network toolkit
+
+- existing defensive connectivity, DNS, route and network diagnostics remain available;
+- bundled network tooling from the upstream project remains part of the repository where applicable.
+
+### USB HID Lab
+
+- USB Host capability detection;
+- script authoring and validation;
+- local step-by-step HID workflow simulation;
+- preview logs and explicit lab sessions.
+
+The historical BadUSB HID injection engine has been replaced by a simulator; V3 does not inject keyboard input into another computer.
+
+### EMV / ISO-DEP
+
+- privacy-first EMV metadata reader;
+- explicit user action before reading a detected NFC tag;
+- scheme/AID identification only;
+- no PAN, expiry date, cardholder name or Track 2 extraction;
+- synthetic EMV APDU Lab with test profiles and a local APDU transcript;
+- legacy Host Card Emulation service neutralized and removed from the manifest;
+- legacy payment AID replaced by a synthetic non-payment lab AID.
+
+### Other tools
+
+- infrared controls for compatible Android hardware;
+- local password generator;
+- QR payload analyzer and local QR generator;
+- expanded device-status screen for Android, NFC, BLE, Wi-Fi, USB Host, IR and network capabilities;
+- light/dark theme and application settings;
+- V3 authorization notice and clearer module descriptions.
+
+## Build locally
 
 The project uses the Gradle wrapper. From the repository root:
 
 ```bash
-./gradlew assembleDebug
+./gradlew clean test assembleDebug
 ```
 
-The debug APK is normally produced under:
+The debug APK is produced under:
 
 ```text
 build/outputs/apk/debug/
 ```
 
-Depending on the project layout/Gradle configuration, Android Studio can also be used to build and run the application.
+## GitHub Actions
+
+The V3 branch includes a GitHub Actions workflow that runs tests, builds the debug APK and uploads the APK as a workflow artifact.
 
 ## Authorized use
 
-Use FlipperDroid V2 only with devices, tags and networks that you own or are explicitly authorized to test. The V2 navigation intentionally defaults to diagnostic and inspection-oriented functionality.
+Use FlipperDroid only with hardware, tags, cards and networks that you own or are explicitly authorized to test. High-impact historical modules are represented by controlled laboratory simulations rather than disruptive actions.
 
 ## Upstream and credits
 
