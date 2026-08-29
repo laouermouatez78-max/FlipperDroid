@@ -45,7 +45,7 @@ fun HomeScreen(
             icon = { Icon(Icons.Default.Security, contentDescription = null) },
             title = { Text("FlipperDroid V4 · Owner Toolkit") },
             text = {
-                Text("Use hardware and network tools only on devices, tags and networks you own or are explicitly authorized to test. Simulation labs stay local and do not target nearby devices.")
+                Text("Use hardware and network tools only on devices, tags and networks you own or are explicitly authorized to test. Hardware-backed labs use dedicated FlipperDroid test protocols and avoid disruptive flooding, credential capture and automatic command injection.")
             },
             confirmButton = {
                 Button(onClick = {
@@ -72,9 +72,9 @@ fun HomeScreen(
     )
 
     val labs = listOf(
-        FeatureItem("BLE Payload Lab", "Preview legacy BLE payload rotations locally without broadcasting a flood.", Icons.Default.Bluetooth, "ble_payload_lab", "LAB"),
-        FeatureItem("USB HID Lab", "Author and validate HID-style scripts in a local simulator only.", Icons.Default.Usb, "usb_hid_lab", "LAB"),
-        FeatureItem("APDU Sandbox", "Run synthetic ISO‑DEP/APDU experiments with test data.", Icons.Default.Contactless, "emv_emulation", "SANDBOX")
+        FeatureItem("BLE Radio Lab", "Transmit a real FlipperDroid test beacon to a second device; legacy vendor profiles remain preview-only.", Icons.Default.Bluetooth, "ble_payload_lab", "REAL LAB"),
+        FeatureItem("USB OTG Lab", "Request real Android USB permission and open/close your connected OTG peripheral.", Icons.Default.Usb, "usb_hid_lab", "REAL LAB"),
+        FeatureItem("NFC APDU Lab", "Run real phone-to-phone HCE/ISO-DEP SELECT, PING and ECHO tests.", Icons.Default.Contactless, "emv_emulation", "REAL LAB")
     )
 
     val utilities = listOf(
@@ -147,7 +147,7 @@ fun HomeScreen(
                             AssistChip(onClick = {}, label = { Text("V4") })
                         }
                         Text(
-                            "Hardware diagnostics, wireless inspection and local training labs in one Android toolkit.",
+                            "Hardware diagnostics, wireless inspection and real device-to-device test labs in one Android toolkit.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
