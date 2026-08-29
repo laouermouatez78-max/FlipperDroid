@@ -14,11 +14,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /**
- * V3 BLE Lab controller.
+ * V4 BLE payload training controller.
  *
- * The legacy implementation continuously broadcast rotating BLE advertisement payloads.
- * V3 keeps the payload catalogue and UI workflow for training, but execution is a local
- * simulation so a user cannot accidentally flood nearby devices.
+ * Legacy payload profiles are kept for inspection and training, but rotation is
+ * simulated locally. No repeated BLE advertisements are transmitted.
  */
 class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -42,16 +41,17 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         loadAdvertisementSets()
-        appendLog("V3 BLE Lab ready — simulation mode")
+        appendLog("V4 BLE Payload Lab ready · local simulation")
     }
 
     fun setBrand(brand: BleSpamBrand) {
+        if (_isActive.value) return
         _brand.value = brand
         loadAdvertisementSets()
         appendLog("Profile changed to ${brand.name}")
     }
 
-    fun startSpam() {
+    fun startSimulation() {
         if (_isActive.value) return
         val queue = selectedSets.ifEmpty { _advertisementSets.value }
         if (queue.isEmpty()) {
@@ -62,23 +62,24 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
         _isActive.value = true
         simulationJob?.cancel()
         simulationJob = viewModelScope.launch {
-            appendLog("Simulation started with ${queue.size} payload(s)")
+            appendLog("Local rotation started with ${queue.size} payload(s)")
             var index = 0
             while (_isActive.value) {
                 val set = queue[index % queue.size]
                 val title = if (set.title.isNotBlank()) set.title else set.type.toString()
-                appendLog("SIM TX #${index + 1}: $title (${set.type})")
+                appendLog("PREVIEW #${index + 1}: $title (${set.type})")
                 index++
                 delay(650)
             }
         }
     }
 
-    fun stopSpam() {
+    fun stopSimulation() {
+        if (!_isActive.value && simulationJob == null) return
         _isActive.value = false
         simulationJob?.cancel()
         simulationJob = null
-        appendLog("Simulation stopped")
+        appendLog("Local rotation stopped")
     }
 
     private fun loadAdvertisementSets() {
@@ -98,11 +99,11 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setCheckedPayloads(checkedStates: List<Boolean>) {
+        if (_isActive.value) return
         selectedSets = allAdvertisementSets.filterIndexed { index, _ ->
             checkedStates.getOrNull(index) == true
         }
         _advertisementSets.value = allAdvertisementSets
-        appendLog("Selected ${selectedSets.size}/${allAdvertisementSets.size} lab payload(s)")
     }
 
     private fun appendLog(message: String) {
@@ -111,7 +112,7 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        stopSpam()
+        stopSimulation()
         super.onCleared()
     }
 }
