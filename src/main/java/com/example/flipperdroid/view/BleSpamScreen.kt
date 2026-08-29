@@ -1,194 +1,152 @@
 package com.example.flipperdroid.view
 
-import android.Manifest
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.border
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.flipperdroid.viewmodel.BleSpamViewModel
-import androidx.compose.ui.graphics.Color
 
-@RequiresApi(Build.VERSION_CODES.S)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BleSpamScreen(
     navController: NavController? = null,
     viewModel: BleSpamViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
-    val context = LocalContext.current
     val advertisementSets by viewModel.advertisementSets.collectAsState()
     val isActive by viewModel.isActive.collectAsState()
     val brand by viewModel.brand.collectAsState()
-    var permissionsGranted by remember { mutableStateOf(false) }
-    var showSnackbar by remember { mutableStateOf<String?>(null) }
+    val logs by viewModel.spamLogs.collectAsState()
+
     val checkedStates = remember(advertisementSets) {
-        mutableStateListOf<Boolean>().apply { clear(); addAll(List(advertisementSets.size) { true }) }
-    }
-    val spamLogs by viewModel.spamLogs.collectAsState()
-
-    // Permissions à demander
-    val permissions = mutableListOf(
-        Manifest.permission.BLUETOOTH_ADVERTISE,
-        Manifest.permission.BLUETOOTH_SCAN,
-        Manifest.permission.BLUETOOTH_CONNECT
-    ).apply {
-        add(Manifest.permission.ACCESS_FINE_LOCATION)
-        add(Manifest.permission.ACCESS_COARSE_LOCATION)
-    }.toTypedArray()
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { result ->
-        permissionsGranted = result.values.all { it }
-        if (!permissionsGranted) showSnackbar = "Permissions Bluetooth requises pour spammer."
-    }
-
-    // Vérifie les permissions au lancement
-    LaunchedEffect(Unit) {
-        val granted = permissions.all {
-            androidx.core.content.ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        mutableStateListOf<Boolean>().apply {
+            addAll(List(advertisementSets.size) { true })
         }
-        permissionsGranted = granted
-        if (!granted) permissionLauncher.launch(permissions)
     }
 
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    val backButton: @Composable (() -> Unit) = {
-        IconButton(onClick = { navController?.navigateUp() }) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
-        }
+    LaunchedEffect(checkedStates.toList()) {
+        viewModel.setCheckedPayloads(checkedStates.toList())
     }
 
     Scaffold(
         topBar = {
-            if (navController != null) {
-                TopAppBar(
-                    title = { Text("BLE Spam") },
-                    navigationIcon = backButton
-                )
-            } else {
-                TopAppBar(
-                    title = { Text("BLE Spam") }
-                )
-            }
-        },
-        snackbarHost = {
-            SnackbarHost(hostState = snackbarHostState)
+            TopAppBar(
+                title = { Text("BLE Lab") },
+                navigationIcon = {
+                    if (navController != null) {
+                        IconButton(onClick = { navController.navigateUp() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    }
+                }
+            )
         }
     ) { paddingValues ->
         Column(
-            Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp)
+            modifier = Modifier.fillMaxSize().padding(paddingValues).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Switch Apple/Samsung
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                val options = listOf(
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(Icons.Default.Bluetooth, contentDescription = null)
+                    Column {
+                        Text("Controlled simulation", fontWeight = FontWeight.Bold)
+                        Text("Legacy Apple/Samsung BLE payload profiles are restored for analysis and training. V3 previews the rotation locally instead of flooding nearby devices.")
+                    }
+                }
+            }
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                listOf(
                     BleSpamViewModel.BleSpamBrand.APPLE to "Apple",
                     BleSpamViewModel.BleSpamBrand.SAMSUNG to "Samsung",
                     BleSpamViewModel.BleSpamBrand.ALL to "All"
-                )
-                options.forEach { (value, label) ->
+                ).forEach { (value, label) ->
                     Row(
-                        Modifier
-                            .padding(horizontal = 8.dp)
-                            .selectable(
-                                selected = brand == value,
-                                onClick = { viewModel.setBrand(value) }
-                            ),
+                        modifier = Modifier.selectable(
+                            selected = brand == value,
+                            enabled = !isActive,
+                            onClick = { viewModel.setBrand(value) }
+                        ),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(
                             selected = brand == value,
+                            enabled = !isActive,
                             onClick = { viewModel.setBrand(value) }
                         )
                         Text(label)
                     }
                 }
             }
-            Spacer(Modifier.height(16.dp))
-            if (!permissionsGranted) {
-                Text(
-                    "Bluetooth permissions are required to use BLE spam.",
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                Button(onClick = {
-                    permissionLauncher.launch(permissions)
-                    if (!permissionsGranted) showSnackbar = "Permissions denied. Unable to use BLE spam."
-                }) {
-                    Text("Request permissions")
-                }
-                return@Column
-            }
-            Text("Select the payloads to spam:", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
-            LazyColumn(Modifier.weight(1f)) {
-                items(advertisementSets.size) { idx ->
-                    val set = advertisementSets[idx]
+
+            Text("Payload catalogue", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            LazyColumn(modifier = Modifier.weight(1f)) {
+                items(advertisementSets.size) { index ->
+                    val set = advertisementSets[index]
                     Row(
-                        Modifier
+                        modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 4.dp)
                             .toggleable(
-                                value = checkedStates.getOrNull(idx) == true,
+                                value = checkedStates.getOrNull(index) == true,
                                 enabled = !isActive,
-                                onValueChange = { checked -> if (idx < checkedStates.size) checkedStates[idx] = checked }
-                            ),
+                                onValueChange = { checked -> checkedStates[index] = checked }
+                            )
+                            .padding(vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Checkbox(
-                            checked = checkedStates.getOrNull(idx) == true,
-                            onCheckedChange = null,
-                            enabled = !isActive
+                            checked = checkedStates.getOrNull(index) == true,
+                            enabled = !isActive,
+                            onCheckedChange = null
                         )
-                        Text(set.title, Modifier.padding(start = 8.dp))
+                        Text(set.title.ifBlank { set.type.toString() }, modifier = Modifier.padding(start = 8.dp))
                     }
                 }
             }
-            Spacer(Modifier.height(16.dp))
+
             Button(
-                onClick = {
-                    viewModel.startSpam()
-                },
-                enabled = !isActive && checkedStates.any { it }
+                onClick = { viewModel.startSpam() },
+                enabled = !isActive && checkedStates.any { it },
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Start Spam")
+                Icon(Icons.Default.PlayArrow, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Run BLE simulation")
             }
+
             if (isActive) {
-                Button(
+                OutlinedButton(
                     onClick = { viewModel.stopSpam() },
-                    modifier = Modifier.padding(top = 8.dp)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Stop Spam")
+                    Icon(Icons.Default.Stop, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Stop simulation")
                 }
             }
-            Spacer(Modifier.height(16.dp))
-            Text("Spam logs:", style = MaterialTheme.typography.titleMedium)
-            LazyColumn(Modifier.weight(1f)) {
-                items(spamLogs.size) { idx ->
-                    Text(spamLogs[idx])
+
+            Text("Simulation log", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            LazyColumn(modifier = Modifier.heightIn(max = 160.dp)) {
+                items(logs.size) { index ->
+                    Text(logs[index], style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
     }
-} 
+}
