@@ -35,6 +35,7 @@ class MainActivity : ComponentActivity() {
     private val wifiAuditViewModel: WifiDeautherViewModel by viewModels()
     private val lanAnalyzerViewModel: LanAnalyzerViewModel by viewModels()
     private val usbInspectorViewModel: UsbInspectorViewModel by viewModels()
+    private val badUsbViewModel: BadUsbViewModel by viewModels()
     private val emvCardEmulationViewModel: EmvCardEmulationViewModel by viewModels()
     private val emvReaderViewModel: EmvReaderViewModel by viewModels()
     private val themeViewModel: ThemeViewModel by viewModels()
@@ -76,7 +77,14 @@ class MainActivity : ComponentActivity() {
             IntentFilter(NfcAdapter.ACTION_NDEF_DISCOVERED),
             IntentFilter(NfcAdapter.ACTION_TECH_DISCOVERED)
         )
-        techListsArray = arrayOf(arrayOf(NfcA::class.java.name, NfcB::class.java.name, NfcF::class.java.name, NfcV::class.java.name))
+        techListsArray = arrayOf(
+            arrayOf(
+                NfcA::class.java.name,
+                NfcB::class.java.name,
+                NfcF::class.java.name,
+                NfcV::class.java.name
+            )
+        )
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -87,7 +95,11 @@ class MainActivity : ComponentActivity() {
 
     private fun handleNfcIntent(intent: Intent?) {
         val action = intent?.action ?: return
-        if (action == NfcAdapter.ACTION_TAG_DISCOVERED || action == NfcAdapter.ACTION_TECH_DISCOVERED || action == NfcAdapter.ACTION_NDEF_DISCOVERED) {
+        if (
+            action == NfcAdapter.ACTION_TAG_DISCOVERED ||
+            action == NfcAdapter.ACTION_TECH_DISCOVERED ||
+            action == NfcAdapter.ACTION_NDEF_DISCOVERED
+        ) {
             intent.getParcelableCompat(NfcAdapter.EXTRA_TAG, Tag::class.java)?.let(nfcViewModel::onTagScanned)
         }
     }
@@ -103,7 +115,9 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         val adapter = nfcAdapter ?: return
         val foregroundIntent = pendingIntent ?: return
-        if (adapter.isEnabled) adapter.enableForegroundDispatch(this, foregroundIntent, intentFiltersArray, techListsArray)
+        if (adapter.isEnabled) {
+            adapter.enableForegroundDispatch(this, foregroundIntent, intentFiltersArray, techListsArray)
+        }
     }
 
     override fun onPause() {
@@ -120,10 +134,12 @@ class MainActivity : ComponentActivity() {
             composable("nfc") { NfcScreen(navController, nfcViewModel) }
             composable("bluetooth_scan") { BluetoothScannerScreen(navController, bluetoothViewModel) }
             composable("ble_advertiser") { BleAdvertiserScreen(navController, bleAdvertiserViewModel) }
+            composable("ble_payload_lab") { BleSpamScreen(navController) }
             composable("wifi_deauther") { WifiDeautherScreen(navController, wifiAuditViewModel) }
             composable("lan_analyzer") { LanAnalyzerScreen(navController, lanAnalyzerViewModel) }
             composable("network") { NetworkToolsScreen(navController, networkToolsViewModel) }
             composable("usb_inspector") { UsbInspectorScreen(navController, usbInspectorViewModel) }
+            composable("usb_hid_lab") { BadUsbScreen(navController, badUsbViewModel) }
             composable("ir") { InfraredScreen(navController) }
             composable("password_generator") { PasswordGeneratorScreen(navController) }
             composable("qr_scanner") { QrScannerScreen(navController) }
