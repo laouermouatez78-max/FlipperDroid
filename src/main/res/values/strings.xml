@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">FlipperDroid V2</string>
-    <string name="emv_card_service_desc">FlipperDroid V2 NFC card service</string>
+    <string name="app_name">FlipperDroid V4</string>
+    <string name="emv_card_service_desc">FlipperDroid V4 NFC card service</string>
 </resources>
