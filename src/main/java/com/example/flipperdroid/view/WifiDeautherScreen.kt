@@ -1,20 +1,16 @@
 package com.example.flipperdroid.view
 
-import android.Manifest
-import android.content.Intent
-import android.net.Uri
-import android.os.Build
-import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.RequiresApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,18 +20,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.example.flipperdroid.viewmodel.*
+import com.example.flipperdroid.viewmodel.NetworkStrength
+import com.example.flipperdroid.viewmodel.SecurityType
+import com.example.flipperdroid.viewmodel.WifiDeautherViewModel
+import com.example.flipperdroid.viewmodel.WifiNetwork
 
-/**
- * Affiche l ecran principal de l outil wifi deauther
- *
- * Cette fonction compose l interface utilisateur permettant de scanner les réseaux wifi a proximite
- * Elle gere les permissions necessaires et affiche la liste des réseaux detectes sous forme de cartes
- *
- * @param navController controleur de navigation pour revenir a l ecran precedent
- * @param viewModel viewmodel contenant les donnees des réseaux et l etat du scan
- */
-@RequiresApi(Build.VERSION_CODES.S)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WifiDeautherScreen(
@@ -46,14 +35,13 @@ fun WifiDeautherScreen(
     val networks by viewModel.networks.collectAsState()
     val isScanning by viewModel.isScanning.collectAsState()
     val permissionsGranted by viewModel.permissionsGranted.collectAsState()
+    val status by viewModel.status.collectAsState()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val allGranted = permissions.entries.all { it.value }
-        if (allGranted) {
-            viewModel.initialize(context)
-        }
+    ) {
+        viewModel.refreshPermissionState()
+        if (viewModel.permissionsGranted.value) viewModel.startScan()
     }
 
     LaunchedEffect(Unit) {
@@ -63,25 +51,18 @@ fun WifiDeautherScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("WiFi Deauther") },
+                title = { Text("Wi‑Fi Audit") },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    if (permissionsGranted) {
-                        IconButton(
-                            onClick = { viewModel.startScan() },
-                            enabled = !isScanning
-                        ) {
-                            Icon(
-                                Icons.Default.Refresh,
-                                contentDescription = "Scan Networks",
-                                tint = if (isScanning) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                      else MaterialTheme.colorScheme.onSurface
-                            )
-                        }
+                    IconButton(
+                        onClick = { viewModel.startScan() },
+                        enabled = permissionsGranted && !isScanning
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Scan")
                     }
                 }
             )
@@ -91,256 +72,121 @@ fun WifiDeautherScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (!permissionsGranted) {
-                PermissionsRequest(
-                    onRequestPermissions = {
-                        val permissions = mutableListOf(
-                            Manifest.permission.ACCESS_FINE_LOCATION,
-                            Manifest.permission.ACCESS_COARSE_LOCATION,
-                            Manifest.permission.CHANGE_WIFI_STATE,
-                            Manifest.permission.ACCESS_WIFI_STATE,
-                            Manifest.permission.ACCESS_NETWORK_STATE
-                        )
-
-                        permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
-
-                        permissionLauncher.launch(permissions.toTypedArray())
-                    },
-                    onOpenSettings = {
-                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                            data = Uri.fromParts("package", context.packageName, null)
-                        }
-                        context.startActivity(intent)
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Security, contentDescription = null)
+                    Column {
+                        Text("Defensive Wi‑Fi audit", fontWeight = FontWeight.Bold)
+                        Text("The legacy Deauther module is restored as a scanner and security posture tool. It does not transmit deauthentication frames.")
                     }
-                )
-                return@Column
+                }
             }
 
-            if (isScanning) {
-                LinearProgressIndicator(
+            if (!permissionsGranted) {
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.primary
-                )
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Wi‑Fi permission required", fontWeight = FontWeight.Bold)
+                        Text("Android requires nearby-device or location permission to return Wi‑Fi scan results.")
+                        Button(onClick = { permissionLauncher.launch(viewModel.requiredPermissions()) }) {
+                            Text("Grant permission")
+                        }
+                    }
+                }
             }
+
+            Text(status, style = MaterialTheme.typography.bodyMedium)
+            if (isScanning) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
 
             if (networks.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        if (isScanning) {
-                            Text(
-                                text = "Scanning for networks...",
-                                style = MaterialTheme.typography.bodyLarge,
-                                textAlign = TextAlign.Center
-                            )
-                        } else {
-                            Icon(
-                                Icons.Default.WifiOff,
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                            )
-                            Text(
-                                text = "No networks found\nTap refresh to start scanning",
-                                style = MaterialTheme.typography.bodyLarge,
-                                textAlign = TextAlign.Center,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                            )
-                            Button(
-                                onClick = { viewModel.startScan() },
-                                enabled = !isScanning
-                            ) {
-                                Icon(Icons.Default.Refresh, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Scan Now")
-                            }
+                        Icon(
+                            if (isScanning) Icons.Default.Wifi else Icons.Default.WifiOff,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Text(
+                            if (isScanning) "Scanning…" else "No scan results yet",
+                            textAlign = TextAlign.Center
+                        )
+                        if (permissionsGranted && !isScanning) {
+                            Button(onClick = { viewModel.startScan() }) { Text("Scan now") }
                         }
                     }
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
+                    modifier = Modifier.fillMaxWidth().weight(1f),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(networks) { network ->
-                        NetworkCard(network = network, viewModel = viewModel)
+                    items(networks, key = { it.bssid }) { network ->
+                        NetworkCard(network, viewModel)
                     }
                 }
             }
         }
     }
 }
-/**
- * Interface qui permet de demerder les permissions à l utilisateur
- *
- * Cette interface demander à l'utilisateur les permissions necessaires pour scanner les réseaux wifi
- *
- * @param onRequestPermissions fonction appelee lors de la demande de permissions
- * @param onOpenSettings fonction appelee pour ouvrir les parametres de l application
- */
+
 @Composable
-fun PermissionsRequest(
-    onRequestPermissions: () -> Unit,
-    onOpenSettings: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            Icons.Default.WifiLock,
-            contentDescription = null,
-            modifier = Modifier.size(48.dp),
-            tint = MaterialTheme.colorScheme.primary
-        )
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        Text(
-            text = "Permissions Required",
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        Text(
-            text = "This feature requires location and WiFi permissions to scan for nearby networks. Please grant the following permissions:",
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        Button(
-            onClick = onRequestPermissions
-        ) {
-            Icon(Icons.Default.Lock, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Grant Permissions")
-        }
-        
-        TextButton(
-            onClick = onOpenSettings
-        ) {
-            Icon(Icons.Default.Settings, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Open Settings")
-        }
-    }
-}
-/**
- * Affiche une carte contenant les informations d un réseau wifi
- *
- * Cette carte presente le nom le bssid le niveau de signal le canal la frequence le type de securite et le moment de la derniere detection
- * Les couleurs de l icone wifi varient en fonction de la qualite du signal
- *
- * @param network objet representant un réseau wifi detecte
- * @param viewModel viewmodel utilise pour evaluer la force du signal et le type de securite
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun NetworkCard(
-    network: WifiNetwork,
-    viewModel: WifiDeautherViewModel
-) {
-    val networkStrength = viewModel.getNetworkStrength(network.rssi)
-    val securityType = viewModel.getSecurityType(network.capabilities)
-    
+fun NetworkCard(network: WifiNetwork, viewModel: WifiDeautherViewModel) {
+    val strength = viewModel.getNetworkStrength(network.rssi)
+    val security = viewModel.getSecurityType(network.capabilities)
+
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        Column(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth()
-        ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text(
-                        text = network.ssid,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = network.bssid,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                    )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(network.ssid, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(network.bssid, style = MaterialTheme.typography.bodySmall)
                 }
                 Icon(
-                    imageVector = Icons.Default.Wifi,
-                    contentDescription = "Signal Strength",
-                    tint = when (networkStrength) {
+                    Icons.Default.Wifi,
+                    contentDescription = strength.name,
+                    tint = when (strength) {
                         NetworkStrength.EXCELLENT -> MaterialTheme.colorScheme.primary
-                        NetworkStrength.GOOD -> MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
-                        NetworkStrength.FAIR -> MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                        NetworkStrength.POOR -> MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-                    },
-                    modifier = Modifier.size(24.dp)
+                        NetworkStrength.GOOD -> MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                        NetworkStrength.FAIR -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                        NetworkStrength.POOR -> MaterialTheme.colorScheme.error
+                    }
                 )
             }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column {
-                    Text(
-                        text = "Channel ${network.channel}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "${network.frequency} MHz",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                    )
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = securityType.name,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "Signal: ${network.rssi} dBm",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                    )
-                }
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("CH ${network.channel} · ${network.frequency} MHz")
+                Text("${network.rssi} dBm")
             }
-            
-            Text(
-                text = "Last seen: ${network.lastSeen}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                modifier = Modifier.align(Alignment.End)
-            )
+
+            val securityLabel = when (security) {
+                SecurityType.OPEN -> "OPEN"
+                SecurityType.WEP -> "WEP"
+                SecurityType.WPA -> "WPA"
+                SecurityType.WPA2 -> "WPA2"
+                SecurityType.WPA3 -> "WPA3"
+            }
+            AssistChip(onClick = {}, label = { Text(securityLabel) })
+            Text(viewModel.securityFinding(network), style = MaterialTheme.typography.bodySmall)
+            Text("Last seen: ${network.lastSeen}", style = MaterialTheme.typography.labelSmall)
         }
     }
-} 
+}
