@@ -96,7 +96,6 @@ class MainActivity : ComponentActivity() {
         val adapter = nfcAdapter ?: return
         val foregroundIntent = pendingIntent ?: return
         if (runCatching { adapter.isEnabled }.getOrDefault(false)) {
-            // null filters + null tech lists = receive every foreground NFC tag as ACTION_TAG_DISCOVERED.
             adapter.enableForegroundDispatch(this, foregroundIntent, null, null)
         }
     }
@@ -126,7 +125,7 @@ class MainActivity : ComponentActivity() {
             composable("qr_scanner") { QrScannerScreen(navController) }
             composable("device_status") { DeviceStatusScreen(navController) }
             composable("emv_reader") { EmvReaderScreen(navController, emvReaderViewModel, nfcViewModel) }
-            composable("emv_emulation") { EmvCardEmulationScreen(navController, emvCardEmulationViewModel) }
+            composable("emv_emulation") { EmvCardEmulationScreen(navController, emvCardEmulationViewModel, nfcViewModel) }
             composable("settings") { SettingsScreen(navController, themeViewModel) }
             composable("about") { V4AboutScreen(navController) }
             composable("legal_mit") { LegalTextScreen(navController, "legacy/mit.txt", "MIT License") }
