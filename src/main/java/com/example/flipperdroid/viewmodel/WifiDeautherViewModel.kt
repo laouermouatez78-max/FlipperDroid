@@ -50,14 +50,7 @@ data class WifiNetwork(
     }
 }
 
-/**
- * V3 Wi-Fi audit controller.
- *
- * The historical "deauther" name is kept for source compatibility, but V3 performs
- * defensive discovery only: SSID/BSSID inventory, RSSI, channel and security posture.
- */
 class WifiDeautherViewModel : ViewModel() {
-
     private var appContext: Context? = null
     private var wifiManager: WifiManager? = null
     private var scanReceiver: BroadcastReceiver? = null
@@ -75,7 +68,7 @@ class WifiDeautherViewModel : ViewModel() {
     val status: StateFlow<String> = _status
 
     fun requiredPermissions(): Array<String> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES)
+        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.NEARBY_WIFI_DEVICES)
     } else {
         arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
     }
@@ -85,7 +78,12 @@ class WifiDeautherViewModel : ViewModel() {
         wifiManager = appContext?.getSystemService(Context.WIFI_SERVICE) as? WifiManager
         registerScanReceiver()
         refreshPermissionState()
-        _status.value = if (wifiManager == null) "Wi-Fi service unavailable" else "Wi-Fi audit ready"
+        _status.value = when {
+            wifiManager == null -> "Wi-Fi service unavailable"
+            wifiManager?.isWifiEnabled != true -> "Turn Wi-Fi on, then scan"
+            _permissionsGranted.value -> "Wi-Fi audit ready"
+            else -> "Grant Wi-Fi scan permissions"
+        }
     }
 
     fun refreshPermissionState() {
@@ -98,21 +96,14 @@ class WifiDeautherViewModel : ViewModel() {
     private fun registerScanReceiver() {
         val context = appContext ?: return
         if (scanReceiver != null) return
-
         scanReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 if (intent?.action == WifiManager.SCAN_RESULTS_AVAILABLE_ACTION) {
-                    readScanResults(
-                        if (intent.getBooleanExtra(WifiManager.EXTRA_RESULTS_UPDATED, false)) {
-                            "Fresh scan complete"
-                        } else {
-                            "Using cached scan results"
-                        }
-                    )
+                    val fresh = intent.getBooleanExtra(WifiManager.EXTRA_RESULTS_UPDATED, false)
+                    readScanResults(if (fresh) "Fresh scan complete" else "Cached scan results")
                 }
             }
         }
-
         val filter = IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             context.registerReceiver(scanReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
@@ -126,17 +117,15 @@ class WifiDeautherViewModel : ViewModel() {
     fun startScan() {
         refreshPermissionState()
         if (!_permissionsGranted.value) {
-            _status.value = "Wi-Fi permission required"
+            _status.value = "Wi-Fi scan permission required"
             return
         }
-
-        val wifi = wifiManager
-        if (wifi == null) {
+        val wifi = wifiManager ?: run {
             _status.value = "Wi-Fi service unavailable"
             return
         }
         if (!wifi.isWifiEnabled) {
-            _status.value = "Turn Wi-Fi on, then scan again"
+            _status.value = "Turn Wi-Fi on in Android settings, then scan again"
             return
         }
 
@@ -145,9 +134,7 @@ class WifiDeautherViewModel : ViewModel() {
         try {
             @Suppress("DEPRECATION")
             val started = wifi.startScan()
-            if (!started) {
-                readScanResults("Android scan throttling active — showing cached results")
-            }
+            if (!started) readScanResults("Android throttled a fresh scan — cached results")
         } catch (security: SecurityException) {
             _permissionsGranted.value = false
             _isScanning.value = false
@@ -192,7 +179,7 @@ class WifiDeautherViewModel : ViewModel() {
     }
 
     fun securityFinding(network: WifiNetwork): String = when (getSecurityType(network.capabilities)) {
-        SecurityType.OPEN -> "Open network — traffic confidentiality depends on higher-layer encryption"
+        SecurityType.OPEN -> "Open network — traffic confidentiality relies on app-layer encryption"
         SecurityType.WEP -> "Legacy WEP detected — replace with WPA2/WPA3"
         SecurityType.WPA -> "Legacy WPA detected — migrate to WPA2/WPA3"
         SecurityType.WPA2 -> "WPA2 detected"
@@ -202,9 +189,7 @@ class WifiDeautherViewModel : ViewModel() {
     override fun onCleared() {
         val context = appContext
         val receiver = scanReceiver
-        if (context != null && receiver != null) {
-            runCatching { context.unregisterReceiver(receiver) }
-        }
+        if (context != null && receiver != null) runCatching { context.unregisterReceiver(receiver) }
         scanReceiver = null
         super.onCleared()
     }
