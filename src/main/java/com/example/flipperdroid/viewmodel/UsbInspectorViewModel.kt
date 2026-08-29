@@ -116,6 +116,35 @@ class UsbInspectorViewModel(app: Application) : AndroidViewModel(app) {
             .onFailure { _status.value = "Could not request USB permission: ${it.message?.take(160) ?: it.javaClass.simpleName}" }
     }
 
+    /**
+     * Performs a real, non-destructive USB Host test: Android opens the selected USB
+     * device and immediately closes the file descriptor. No interface is claimed and
+     * no endpoint data is sent.
+     */
+    fun testOpenConnection(deviceId: Int) {
+        val device = manager.deviceList.values.firstOrNull { it.deviceId == deviceId } ?: run {
+            _status.value = "USB device is no longer connected"
+            refresh()
+            return
+        }
+        if (!manager.hasPermission(device)) {
+            _status.value = "Grant USB permission before running the connection test"
+            return
+        }
+
+        val connection = runCatching { manager.openDevice(device) }.getOrNull()
+        if (connection == null) {
+            _status.value = "Android could not open the USB device"
+            return
+        }
+
+        try {
+            _status.value = "REAL USB TEST PASSED · opened %04X:%04X · ${device.interfaceCount} interface(s)".format(device.vendorId, device.productId)
+        } finally {
+            runCatching { connection.close() }
+        }
+    }
+
     private fun UsbDevice.toInfo(hasPermission: Boolean): UsbDeviceInfo {
         val interfaceList = (0 until interfaceCount).map { index ->
             val intf = getInterface(index)
