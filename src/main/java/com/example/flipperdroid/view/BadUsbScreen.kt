@@ -1,26 +1,22 @@
 package com.example.flipperdroid.view
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.flipperdroid.viewmodel.BadUsbViewModel
 
-/**
- * Ecran BadUSB permettant d envoyer un script clavier depuis le telephone
- *
- * @param navController controleur de navigation
- * @param viewModel vue modele gere l etat de la connexion usb et le script clavier
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BadUsbScreen(
@@ -29,26 +25,19 @@ fun BadUsbScreen(
 ) {
     val isUsbHostAvailable by viewModel.isUsbHostAvailable
     val isConnected by viewModel.isConnected
-    val currentScript = viewModel.currentScript.collectAsState()
-    val status = viewModel.status.collectAsState()
+    val currentScript by viewModel.currentScript.collectAsState()
+    val status by viewModel.status.collectAsState()
+    val previewLog by viewModel.previewLog.collectAsState()
 
     Scaffold(
         topBar = {
-            /**
-             * Barre superieure avec bouton retour et titre
-             */
             TopAppBar(
-                title = { Text("Bad USB") },
+                title = { Text("USB HID Lab") },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
-                )
+                }
             )
         }
     ) { paddingValues ->
@@ -57,104 +46,68 @@ fun BadUsbScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            /**
-             * Carte affichant le statut de la connexion USB
-             */
-            Card(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = when {
-                            !isUsbHostAvailable -> "USB Host not supported on this device"
-                            !isConnected -> "Not connected as USB keyboard"
-                            else -> "Ready to execute keyboard commands"
-                        },
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = if (!isUsbHostAvailable || !isConnected)
-                            MaterialTheme.colorScheme.error
-                        else
-                            MaterialTheme.colorScheme.primary
-                    )
-
-                    if (status.value.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = status.value,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                    Icon(Icons.Default.Usb, contentDescription = null)
+                    Column {
+                        Text("BadUSB workflow restored", fontWeight = FontWeight.Bold)
+                        Text("V3 lets you author, validate and replay scripts in a local simulator. It does not inject keystrokes into another machine.")
                     }
                 }
             }
 
-            /**
-             * Champ de saisie du script clavier
-             */
-            OutlinedTextField(
-                value = currentScript.value,
-                onValueChange = { viewModel.updateScript(it) },
-                label = { Text("Enter text to type") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp),
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Text
-                ),
-                enabled = isUsbHostAvailable && isConnected
+            AssistChip(
+                onClick = {},
+                label = { Text(if (isUsbHostAvailable) "USB Host detected" else "USB Host unavailable") }
             )
 
-            /**
-             * Bouton pour executer le script clavier
-             */
-            Button(
-                onClick = { viewModel.executeScript() },
-                enabled = isUsbHostAvailable && isConnected && currentScript.value.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    Icons.Default.PlayArrow,
-                    contentDescription = "Execute",
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Execute Script")
+            OutlinedTextField(
+                value = currentScript,
+                onValueChange = viewModel::updateScript,
+                label = { Text("Script / text to simulate") },
+                supportingText = { Text("Max 20,000 characters. Simulation only.") },
+                modifier = Modifier.fillMaxWidth().height(150.dp)
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { viewModel.executeScript() },
+                    enabled = currentScript.isNotBlank(),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Simulate")
+                }
+                OutlinedButton(
+                    onClick = { if (isConnected) viewModel.disconnect() else viewModel.startLabSession() },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.Stop, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (isConnected) "End session" else "Start lab")
+                }
             }
 
-            /**
-             * Carte d alerte si l appareil n est pas connecte en USB
-             */
-            if (isUsbHostAvailable && !isConnected) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
+            Text(status, style = MaterialTheme.typography.bodyMedium)
+            Text("Preview log", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                items(previewLog.size) { index ->
+                    Text(
+                        previewLog[index],
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace
                     )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                    ) {
-                        Text(
-                            text = "USB Connection Required",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Please connect your device to a computer via USB cable and enable USB debugging",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
                 }
             }
         }

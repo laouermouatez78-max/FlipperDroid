@@ -14,13 +14,18 @@ android {
         applicationId = "com.example.flipperdroid"
         minSdk = 24
         targetSdk = 35
-        versionCode = 2
-        versionName = "2.0.0"
+        versionCode = 3
+        versionName = "3.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables.useSupportLibrary = true
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -29,6 +34,7 @@ android {
             )
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -38,20 +44,27 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+    packaging {
+        resources.excludes += setOf(
+            "META-INF/AL2.0",
+            "META-INF/LGPL2.1"
+        )
     }
 }
 
 dependencies {
-    val lifecycle_version = "2.8.7"
-    val nav_version = "2.8.9"
-    val compose_version = "1.6.4"
+    val lifecycleVersion = "2.8.7"
+    val navVersion = "2.8.9"
+    val composeVersion = "1.6.4"
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:$lifecycle_version")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycle_version")
-    implementation("androidx.navigation:navigation-compose:$nav_version")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:$lifecycleVersion")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycleVersion")
+    implementation("androidx.navigation:navigation-compose:$navVersion")
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
@@ -59,9 +72,9 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.navigation.runtime.ktx)
     implementation(libs.androidx.navigation.runtime.android)
-
-    implementation("androidx.compose.material:material-icons-core:$compose_version")
-    implementation("androidx.compose.material:material-icons-extended:$compose_version")
+    implementation("androidx.compose.material:material-icons-core:$composeVersion")
+    implementation("androidx.compose.material:material-icons-extended:$composeVersion")
+    implementation("com.google.zxing:core:3.5.2")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
@@ -70,5 +83,4 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-    implementation("com.google.zxing:core:3.5.2")
 }

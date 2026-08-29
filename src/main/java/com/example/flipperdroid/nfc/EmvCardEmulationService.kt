@@ -2,31 +2,20 @@ package com.example.flipperdroid.nfc
 
 import android.nfc.cardemulation.HostApduService
 import android.os.Bundle
-import android.util.Log
 
+/**
+ * Legacy compatibility stub for FlipperDroid V3.
+ *
+ * The real V3 EMV Lab runs entirely inside Compose and does not register this service.
+ * If somebody accidentally registers the legacy service later, it refuses every APDU
+ * instead of impersonating a payment application.
+ */
 class EmvCardEmulationService : HostApduService() {
-    companion object {
-        private const val TAG = "EmvCardEmulationService"
-        // Exemple d'AID Visa
-        private val VISA_AID = byteArrayOf(0xA0.toByte(), 0x00, 0x00, 0x00, 0x03, 0x10, 0x10)
-        private val SELECT_OK = byteArrayOf(0x90.toByte(), 0x00)
-        private val UNKNOWN_CMD = byteArrayOf(0x6A.toByte(), 0x82.toByte())
-    }
 
-    override fun processCommandApdu(commandApdu: ByteArray?, extras: Bundle?): ByteArray {
-        Log.d(TAG, "processCommandApdu: ${commandApdu?.joinToString { String.format("%02X", it) }}")
-        // Simple SELECT AID check
-        if (commandApdu != null && commandApdu.size >= 7) {
-            val aid = commandApdu.copyOfRange(5, 12)
-            if (aid.contentEquals(VISA_AID)) {
-                // Réponse simulée : juste un succès
-                return SELECT_OK
-            }
-        }
-        return UNKNOWN_CMD
-    }
+    private val unsupported = byteArrayOf(0x6A.toByte(), 0x82.toByte())
 
-    override fun onDeactivated(reason: Int) {
-        Log.d(TAG, "onDeactivated: $reason")
-    }
-} 
+    override fun processCommandApdu(commandApdu: ByteArray?, extras: Bundle?): ByteArray =
+        unsupported.copyOf()
+
+    override fun onDeactivated(reason: Int) = Unit
+}
