@@ -1,4 +1,3 @@
 <resources>
-    <string name="app_name">Flipperdroid</string>
-    <string name="emv_card_service_desc">Emulation carte EMV (Visa)</string>
+    <string name="app_name">FlipperDroid V2</string>
 </resources>
