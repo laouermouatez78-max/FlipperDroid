@@ -1,89 +1,65 @@
-# FlipperDroid
+# FlipperDroid V2
 
-**FlipperDroid** is an Android application developed in Kotlin, inspired by the well-known **Flipper Zero** device. It brings a powerful set of wireless and hardware security testing tools to Android smartphones, leveraging their native capabilities.
+FlipperDroid V2 is an Android security and hardware diagnostics toolkit written in Kotlin and Jetpack Compose.
 
-<p align="center">
-  <img src="https://github.com/Jeremiznoo/FlipperDroid/blob/main/src/main/ic_launcher-playstore.png">
-</p>
+This fork is based on the open-source **FlipperDroid** project by **Jeremiznoo** and keeps the upstream attribution and license terms.
 
----
+## V2 goals
 
-## Overview
+V2 focuses on a cleaner, safer and more maintainable baseline:
 
-FlipperDroid transforms a modern Android phone into a flexible and portable alternative to Flipper Zero. It enables security professionals, researchers, and enthusiasts to interact with and analyze a wide range of communication protocols and interfaces, directly from a mobile device.
+- modernized home screen and navigation;
+- Android 7+ compatibility path (`minSdk 24`);
+- reduced Android permissions;
+- NFC reading, history and real local export;
+- defensive network diagnostics (Ping, DNS and route checks);
+- infrared support for compatible devices;
+- local password generator;
+- device capability/status screen;
+- light/dark theme settings;
+- high-risk experimental modules are not exposed from the main V2 navigation.
 
-The application includes modules for scanning, analyzing, and emulating NFC, Bluetooth, RFID, and more, as well as tools for network diagnostics and USB-based attacks, making it a comprehensive mobile toolkit.
+## Version
 
----
+- `versionCode`: **2**
+- `versionName`: **2.0.0**
 
-## Features
+## Main V2 screens
 
-- **NFC & EMV Reading and Emulation**  
-  Read and emulate NFC cards, including contactless bank cards and other chip-based identifiers.
+- **NFC Reader** — inspect compatible tags, keep scan history and export scan data.
+- **Network Diagnostics** — basic connectivity and name-resolution checks.
+- **Infrared** — use supported consumer IR hardware with devices you own.
+- **Password Generator** — generate passwords locally on-device.
+- **Device Status** — check Android, NFC, IR and network availability.
+- **Settings** — application and theme preferences.
+- **About V2** — version, credits and safety model.
 
-- **Bluetooth Interface**  
-  Scan for Bluetooth devices, connect to them, and prepare for future emulation capabilities.
+## Build
 
-- **Network Tools**  
-  Integrated interface for tools like Nmap, Wi-Fi scanning, and packet analysis (in development).
+The project uses the Gradle wrapper. From the repository root:
 
-- **RFID and Infrared**  
-  Modules to read, interact with, or send signals using RFID or infrared communication.
-
-- **BadUSB Module**  
-  Emulate malicious USB HID devices for penetration testing and user awareness purposes.
-
-- **Advanced Logging System**  
-  View, manage, and export logs related to device interactions, scans, and application activity.
-
-- **Customizable Technical Settings**  
-  Modify key behaviors and parameters within the app for advanced customization.
-
-- **Material UI Compatibility**  
-  Built with respect to Material Design guidelines for native Android look and feel.
-
----
-
-### Requirements
-
-- Android 10 or newer
-- Tested with LineageOS on a rooted Google Pixel 7
-
----
-
-## Usage and Legal Disclaimer
-
-**This application is intended strictly for educational, research, and legal penetration testing purposes.**  
-Misuse of this software for unauthorized access, emulation, or attacks on third-party devices or systems is strictly prohibited. The developer is not responsible for any consequences resulting from illegal use.
-
----
-
-## Project Structure
-
+```bash
+./gradlew assembleDebug
 ```
-FlipperDroid/
-├── src/ # Application source code
-├── build/ # Gradle build artifacts
-├── .gradle/ .idea/ .kotlin/ # Configuration and IDE metadata
-├── build.gradle.kts # Kotlin DSL build configuration
-├── settings.gradle.kts
-├── gradlew / gradlew.bat # Gradle wrapper
-├── proguard-rules.pro # Obfuscation and shrink rules
-└── local.properties # Local Android SDK path
+
+The debug APK is normally produced under:
+
+```text
+build/outputs/apk/debug/
 ```
+
+Depending on the project layout/Gradle configuration, Android Studio can also be used to build and run the application.
+
+## Authorized use
+
+Use FlipperDroid V2 only with devices, tags and networks that you own or are explicitly authorized to test. The V2 navigation intentionally defaults to diagnostic and inspection-oriented functionality.
+
+## Upstream and credits
+
+Original project: **Jeremiznoo/FlipperDroid**.
+
+Thanks to the original FlipperDroid contributors, the Android open-source ecosystem, and the Flipper Zero project for inspiration.
 
 ## License
 
-This project is released under the **MIT License**. See the [`LICENSE`](LICENSE) file for details.
-
----
-
-## Acknowledgments
-
-- The Flipper Zero project for functional inspiration
-- LineageOS and the Android open-source ecosystem
-- F-Droid for supporting free and open software distribution
-
----
-
-## Screenshots
+See [`LICENSE`](LICENSE). The upstream project is distributed under the MIT License.
