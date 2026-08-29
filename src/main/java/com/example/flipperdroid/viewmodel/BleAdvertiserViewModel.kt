@@ -44,7 +44,7 @@ class BleAdvertiserViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun updateName(value: String) {
-        _localName.value = value.take(24)
+        _localName.value = value.take(20)
     }
 
     fun canAdvertise(): Boolean = adapter?.isMultipleAdvertisementSupported == true && advertiser != null
@@ -69,7 +69,7 @@ class BleAdvertiserViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
                 ContextCompat.checkSelfPermission(app, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
             ) {
                 bt.name = _localName.value
@@ -83,12 +83,16 @@ class BleAdvertiserViewModel(app: Application) : AndroidViewModel(app) {
                 .build()
 
             val data = AdvertiseData.Builder()
-                .setIncludeDeviceName(true)
+                .setIncludeDeviceName(false)
                 .addServiceUuid(ParcelUuid(serviceUuid))
-                .addServiceData(ParcelUuid(serviceUuid), byteArrayOf(0x46, 0x44, 0x34))
+                .addManufacturerData(0xFFFF, byteArrayOf(0x46, 0x44, 0x34))
                 .build()
 
-            adv.startAdvertising(settings, data, callback)
+            val scanResponse = AdvertiseData.Builder()
+                .setIncludeDeviceName(true)
+                .build()
+
+            adv.startAdvertising(settings, data, scanResponse, callback)
             _status.value = "Starting BLE advertisement…"
         }.onFailure {
             _status.value = "Advertising error: ${it.message}"
