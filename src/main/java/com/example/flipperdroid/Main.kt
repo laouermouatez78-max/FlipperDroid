@@ -23,23 +23,19 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.flipperdroid.ui.theme.FlipperDroidTheme
-import com.example.flipperdroid.view.DeviceStatusScreen
-import com.example.flipperdroid.view.HomeScreen
-import com.example.flipperdroid.view.InfraredScreen
-import com.example.flipperdroid.view.LegalTextScreen
-import com.example.flipperdroid.view.NetworkToolsScreen
-import com.example.flipperdroid.view.NfcScreen
-import com.example.flipperdroid.view.PasswordGeneratorScreen
-import com.example.flipperdroid.view.SettingsScreen
-import com.example.flipperdroid.view.V2AboutScreen
-import com.example.flipperdroid.viewmodel.NetworkToolsViewModel
-import com.example.flipperdroid.viewmodel.NfcViewModel
-import com.example.flipperdroid.viewmodel.ThemeViewModel
+import com.example.flipperdroid.view.*
+import com.example.flipperdroid.viewmodel.*
 
 class MainActivity : ComponentActivity() {
 
     private val nfcViewModel: NfcViewModel by viewModels()
+    private val badUsbViewModel: BadUsbViewModel by viewModels()
+    private val bluetoothViewModel: BluetoothViewModel by viewModels()
+    private val bleLabViewModel: BleSpamViewModel by viewModels()
     private val networkToolsViewModel: NetworkToolsViewModel by viewModels()
+    private val wifiAuditViewModel: WifiDeautherViewModel by viewModels()
+    private val emvCardEmulationViewModel: EmvCardEmulationViewModel by viewModels()
+    private val emvReaderViewModel: EmvReaderViewModel by viewModels()
     private val themeViewModel: ThemeViewModel by viewModels()
 
     private var nfcAdapter: NfcAdapter? = null
@@ -50,6 +46,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         configureNfc()
+        badUsbViewModel.initialize(this)
+        bluetoothViewModel.initialize(this)
 
         setContent {
             val isDarkMode by themeViewModel.isDarkMode.collectAsState()
@@ -68,12 +66,9 @@ class MainActivity : ComponentActivity() {
         val launchIntent = Intent(this, javaClass).apply {
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
-
         val mutabilityFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             PendingIntent.FLAG_MUTABLE
-        } else {
-            0
-        }
+        } else 0
 
         pendingIntent = PendingIntent.getActivity(
             this,
@@ -81,13 +76,11 @@ class MainActivity : ComponentActivity() {
             launchIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or mutabilityFlag
         )
-
         intentFiltersArray = arrayOf(
             IntentFilter(NfcAdapter.ACTION_TAG_DISCOVERED),
             IntentFilter(NfcAdapter.ACTION_NDEF_DISCOVERED),
             IntentFilter(NfcAdapter.ACTION_TECH_DISCOVERED)
         )
-
         techListsArray = arrayOf(
             arrayOf(
                 NfcA::class.java.name,
@@ -106,8 +99,7 @@ class MainActivity : ComponentActivity() {
 
     private fun handleNfcIntent(intent: Intent?) {
         val action = intent?.action ?: return
-        if (
-            action == NfcAdapter.ACTION_TAG_DISCOVERED ||
+        if (action == NfcAdapter.ACTION_TAG_DISCOVERED ||
             action == NfcAdapter.ACTION_TECH_DISCOVERED ||
             action == NfcAdapter.ACTION_NDEF_DISCOVERED
         ) {
@@ -116,27 +108,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun <T : Parcelable> Intent.getParcelableCompat(key: String, clazz: Class<T>): T? {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+    private fun <T : Parcelable> Intent.getParcelableCompat(key: String, clazz: Class<T>): T? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             getParcelableExtra(key, clazz)
         } else {
             @Suppress("DEPRECATION", "UNCHECKED_CAST")
             (getParcelableExtra<Parcelable>(key) as? T)
         }
-    }
 
     override fun onResume() {
         super.onResume()
         val adapter = nfcAdapter ?: return
         val foregroundIntent = pendingIntent ?: return
-
         if (adapter.isEnabled) {
-            adapter.enableForegroundDispatch(
-                this,
-                foregroundIntent,
-                intentFiltersArray,
-                techListsArray
-            )
+            adapter.enableForegroundDispatch(this, foregroundIntent, intentFiltersArray, techListsArray)
         }
     }
 
@@ -151,50 +136,30 @@ class MainActivity : ComponentActivity() {
         val navController = rememberNavController()
 
         NavHost(navController = navController, startDestination = "home") {
-            composable("home") {
-                HomeScreen(navController = navController, nfcViewModel = nfcViewModel)
+            composable("home") { HomeScreen(navController, nfcViewModel) }
+            composable("nfc") { NfcScreen(navController, nfcViewModel) }
+            composable("badusb") { BadUsbScreen(navController, badUsbViewModel) }
+            composable("bluetooth") { BleSpamScreen(navController, bleLabViewModel) }
+            composable("network") { NetworkToolsScreen(navController, networkToolsViewModel) }
+            composable("wifi_deauther") { WifiDeautherScreen(navController, wifiAuditViewModel) }
+            composable("ir") { InfraredScreen(navController) }
+            composable("password_generator") { PasswordGeneratorScreen(navController) }
+            composable("qr_scanner") { QrScannerScreen(navController) }
+            composable("device_status") { DeviceStatusScreen(navController) }
+            composable("emv_reader") { EmvReaderScreen(navController, emvReaderViewModel) }
+            composable("emv_emulation") {
+                EmvCardEmulationScreen(navController, emvCardEmulationViewModel)
             }
-            composable("nfc") {
-                NfcScreen(navController = navController, nfcViewModel = nfcViewModel)
-            }
-            composable("network") {
-                NetworkToolsScreen(navController = navController, viewModel = networkToolsViewModel)
-            }
-            composable("ir") {
-                InfraredScreen(navController = navController)
-            }
-            composable("password_generator") {
-                PasswordGeneratorScreen(navController = navController)
-            }
-            composable("device_status") {
-                DeviceStatusScreen(navController = navController)
-            }
-            composable("settings") {
-                SettingsScreen(navController = navController, themeViewModel = themeViewModel)
-            }
-            composable("about") {
-                V2AboutScreen(navController = navController)
-            }
+            composable("settings") { SettingsScreen(navController, themeViewModel) }
+            composable("about") { V2AboutScreen(navController) }
             composable("legal_mit") {
-                LegalTextScreen(
-                    navController = navController,
-                    assetPath = "legacy/mit.txt",
-                    title = "MIT License"
-                )
+                LegalTextScreen(navController, "legacy/mit.txt", "MIT License")
             }
             composable("legal_cgu") {
-                LegalTextScreen(
-                    navController = navController,
-                    assetPath = "legacy/term_of_use.txt",
-                    title = "Terms of Use"
-                )
+                LegalTextScreen(navController, "legacy/term_of_use.txt", "Terms of Use")
             }
             composable("legal_mentions") {
-                LegalTextScreen(
-                    navController = navController,
-                    assetPath = "legacy/legacy_notice.txt",
-                    title = "Legal Notice"
-                )
+                LegalTextScreen(navController, "legacy/legacy_notice.txt", "Legal Notice")
             }
         }
     }
