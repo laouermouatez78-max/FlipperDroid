@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -20,10 +21,7 @@ import com.example.flipperdroid.viewmodel.NfcViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NfcScreen(
-    navController: NavController,
-    nfcViewModel: NfcViewModel
-) {
+fun NfcScreen(navController: NavController, nfcViewModel: NfcViewModel) {
     val currentTagUid by nfcViewModel.currentTagUid.collectAsState()
     val currentTagType by nfcViewModel.currentTagType.collectAsState()
     val ndefSummary by nfcViewModel.ndefSummary.collectAsState()
@@ -33,40 +31,35 @@ fun NfcScreen(
     var showHistory by remember { mutableStateOf(false) }
     var showLogs by remember { mutableStateOf(false) }
     var confirmMemoryRead by remember { mutableStateOf(false) }
+    var ndefText by remember { mutableStateOf("") }
 
     if (confirmMemoryRead) {
         AlertDialog(
             onDismissRequest = { confirmMemoryRead = false },
             title = { Text("Read MIFARE memory?") },
-            text = { Text("Only continue for a tag you own or are explicitly authorized to inspect. V3 will try the standard default key and show readable blocks.") },
+            text = { Text("Continue only for a tag you own or are authorized to inspect. V4 will try the standard default key and display readable blocks.") },
             confirmButton = {
                 Button(onClick = {
                     confirmMemoryRead = false
                     nfcViewModel.readMifareDump()
-                }) { Text("Read authorized tag") }
+                }) { Text("Read tag") }
             },
-            dismissButton = {
-                TextButton(onClick = { confirmMemoryRead = false }) { Text("Cancel") }
-            }
+            dismissButton = { TextButton(onClick = { confirmMemoryRead = false }) { Text("Cancel") } }
         )
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("NFC / RFID · V3") },
+                title = { Text("NFC / RFID · V4") },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showHistory = !showHistory }) {
-                        Icon(Icons.Default.History, contentDescription = "History")
-                    }
-                    IconButton(onClick = { showLogs = !showLogs }) {
-                        Icon(Icons.Default.Save, contentDescription = "Logs")
-                    }
+                    IconButton(onClick = { showHistory = !showHistory }) { Icon(Icons.Default.History, contentDescription = "History") }
+                    IconButton(onClick = { showLogs = !showLogs }) { Icon(Icons.Default.Save, contentDescription = "Logs") }
                 }
             )
         }
@@ -81,7 +74,7 @@ fun NfcScreen(
                         Text("Current tag", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text("UID: ${currentTagUid ?: "Waiting for a tag…"}", fontFamily = FontFamily.Monospace)
                         Text("Technologies: ${currentTagType ?: "-"}")
-                        Text("V3 scans metadata first; memory is read only after your explicit request.", style = MaterialTheme.typography.bodySmall)
+                        Text("V4 reads metadata first and lets you explicitly read memory or write NDEF text.", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -90,7 +83,7 @@ fun NfcScreen(
                 item {
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("NDEF metadata", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("NDEF", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             ndefSummary.forEach { Text(it, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) }
                         }
                     }
@@ -98,6 +91,29 @@ fun NfcScreen(
             }
 
             if (currentTagUid != null) {
+                item {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("Write NDEF text", fontWeight = FontWeight.Bold)
+                            OutlinedTextField(
+                                value = ndefText,
+                                onValueChange = { ndefText = it },
+                                label = { Text("Text for your tag") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Button(
+                                onClick = { nfcViewModel.writeNdefText(ndefText) },
+                                enabled = ndefText.isNotBlank(),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Write to scanned NDEF tag")
+                            }
+                        }
+                    }
+                }
+
                 item {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { confirmMemoryRead = true }, modifier = Modifier.weight(1f)) {
@@ -120,9 +136,7 @@ fun NfcScreen(
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("MIFARE memory", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                IconButton(onClick = { nfcViewModel.clearDump() }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Clear dump")
-                                }
+                                IconButton(onClick = { nfcViewModel.clearDump() }) { Icon(Icons.Default.Delete, contentDescription = "Clear dump") }
                             }
                             currentTagDump.forEachIndexed { index, line ->
                                 Text("$index: $line", fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
@@ -138,12 +152,9 @@ fun NfcScreen(
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("Logs", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                IconButton(onClick = { nfcViewModel.clearLogs() }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Clear logs")
-                                }
+                                IconButton(onClick = { nfcViewModel.clearLogs() }) { Icon(Icons.Default.Delete, contentDescription = "Clear logs") }
                             }
-                            if (logs.isEmpty()) Text("No logs yet.")
-                            else logs.takeLast(50).forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+                            if (logs.isEmpty()) Text("No logs yet.") else logs.takeLast(50).forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
                         }
                     }
                 }
@@ -151,16 +162,13 @@ fun NfcScreen(
 
             if (showHistory) {
                 item { Text("Scan history", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-                if (scanHistory.isEmpty()) {
-                    item { Text("No scans yet.") }
-                } else {
-                    items(scanHistory.asReversed()) { scan ->
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(12.dp)) {
-                                Text(scan.timestamp, style = MaterialTheme.typography.labelMedium)
-                                Text("UID: ${scan.uid ?: "-"}", fontFamily = FontFamily.Monospace)
-                                Text("Type: ${scan.type ?: "-"}")
-                            }
+                if (scanHistory.isEmpty()) item { Text("No scans yet.") }
+                else items(scanHistory.asReversed()) { scan ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text(scan.timestamp, style = MaterialTheme.typography.labelMedium)
+                            Text("UID: ${scan.uid ?: "-"}", fontFamily = FontFamily.Monospace)
+                            Text("Type: ${scan.type ?: "-"}")
                         }
                     }
                 }
