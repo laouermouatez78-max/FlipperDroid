@@ -22,16 +22,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /**
- * V4 BLE lab controller.
+ * V4 BLE Red Team Lab controller.
  *
- * Legacy vendor payloads stay preview-only. The real-radio path uses a dedicated
- * FlipperDroid test manufacturer payload at a normal Android advertising rate so a
- * second device owned by the user can verify real BLE transmission without flooding
- * nearby devices or impersonating a vendor accessory.
+ * Real-radio testing is intentionally bounded: it uses a dedicated FlipperDroid
+ * manufacturer payload, Android-managed advertising rates and an automatic timeout.
+ * Vendor impersonation/crash payloads remain preview-only.
  */
 class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
 
     enum class BleSpamBrand { APPLE, SAMSUNG, ALL }
+    enum class RealTxProfile { NORMAL, SHORT_STRESS }
 
     private val bluetoothManager = app.getSystemService(BluetoothManager::class.java)
     private val adapter get() = bluetoothManager?.adapter
@@ -58,18 +58,37 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
     private val _realStatus = MutableStateFlow("Real BLE test beacon ready")
     val realStatus: StateFlow<String> = _realStatus
 
+    private val _realTxProfile = MutableStateFlow(RealTxProfile.NORMAL)
+    val realTxProfile: StateFlow<RealTxProfile> = _realTxProfile
+
+    private val _burstDurationSeconds = MutableStateFlow(10)
+    val burstDurationSeconds: StateFlow<Int> = _burstDurationSeconds
+
+    private val _elapsedSeconds = MutableStateFlow(0)
+    val elapsedSeconds: StateFlow<Int> = _elapsedSeconds
+
     private var allAdvertisementSets: List<AdvertisementSet> = emptyList()
     private var selectedSets: List<AdvertisementSet> = emptyList()
     private var simulationJob: Job? = null
+    private var realTimeoutJob: Job? = null
+    private var realElapsedJob: Job? = null
 
     private val realAdvertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
             _realBeaconActive.value = true
-            _realStatus.value = "Real BLE beacon is on-air"
-            appendLog("REAL TX started · FlipperDroid test payload")
+            _realStatus.value = when (_realTxProfile.value) {
+                RealTxProfile.NORMAL -> "Real BLE beacon is on-air"
+                RealTxProfile.SHORT_STRESS -> "Bounded RF stress burst is on-air"
+            }
+            appendLog(
+                "REAL TX started · ${_realTxProfile.value.name} · " +
+                    "${_burstDurationSeconds.value}s max · FlipperDroid payload"
+            )
+            startElapsedCounter()
         }
 
         override fun onStartFailure(errorCode: Int) {
+            cancelRealJobs()
             _realBeaconActive.value = false
             _realStatus.value = "BLE start failed · ${advertiseError(errorCode)}"
             appendLog("REAL TX failed · ${advertiseError(errorCode)}")
@@ -78,7 +97,7 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         loadAdvertisementSets()
-        appendLog("V4 BLE Lab ready")
+        appendLog("V4 BLE Red Team Lab ready")
     }
 
     fun requiredPermissions(): Array<String> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -100,8 +119,21 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
 
     fun updateRealPayload(value: String) {
         if (_realBeaconActive.value) return
-        val cleaned = value.filter { !it.isISOControl() }.take(12)
-        _realPayloadText.value = cleaned
+        _realPayloadText.value = value.filter { !it.isISOControl() }.take(12)
+    }
+
+    fun setRealTxProfile(profile: RealTxProfile) {
+        if (_realBeaconActive.value) return
+        _realTxProfile.value = profile
+        _realStatus.value = when (profile) {
+            RealTxProfile.NORMAL -> "Normal lab beacon selected"
+            RealTxProfile.SHORT_STRESS -> "Short bounded stress profile selected"
+        }
+    }
+
+    fun setBurstDurationSeconds(seconds: Int) {
+        if (_realBeaconActive.value) return
+        _burstDurationSeconds.value = seconds.coerceIn(5, 20)
     }
 
     fun startRealBeacon() {
@@ -124,38 +156,81 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
             _realStatus.value = "BLE advertising not supported by this phone"
             return
         }
+
+        cancelRealJobs()
+        _elapsedSeconds.value = 0
+
         val text = _realPayloadText.value.ifBlank { "HELLO-V4" }
-        val payload = byteArrayOf(0x46, 0x44, 0x34) + text.toByteArray(Charsets.UTF_8).take(12).toByteArray()
+        val payload = byteArrayOf(0x46, 0x44, 0x34) +
+            text.toByteArray(Charsets.UTF_8).take(12).toByteArray()
+        val durationMs = _burstDurationSeconds.value * 1000
+        val mode = when (_realTxProfile.value) {
+            RealTxProfile.NORMAL -> AdvertiseSettings.ADVERTISE_MODE_BALANCED
+            RealTxProfile.SHORT_STRESS -> AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY
+        }
+
         val settings = AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
+            .setAdvertiseMode(mode)
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
             .setConnectable(false)
-            .setTimeout(0)
+            .setTimeout(durationMs)
             .build()
+
         val data = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
             .addManufacturerData(0xFFFF, payload)
             .build()
+
         val scanResponse = AdvertiseData.Builder()
             .setIncludeDeviceName(true)
             .build()
 
         runCatching {
             adv.startAdvertising(settings, data, scanResponse, realAdvertiseCallback)
-            _realStatus.value = "Starting real BLE beacon…"
+            _realStatus.value = "Starting bounded BLE transmission…"
+            realTimeoutJob = viewModelScope.launch {
+                delay(durationMs.toLong())
+                if (_realBeaconActive.value) {
+                    stopRealBeacon("Automatic stop after ${_burstDurationSeconds.value}s")
+                }
+            }
         }.onFailure {
+            cancelRealJobs()
             _realStatus.value = "BLE start error: ${it.message ?: it.javaClass.simpleName}"
             appendLog("REAL TX exception · ${it.javaClass.simpleName}")
         }
     }
 
-    fun stopRealBeacon() {
+    fun stopRealBeacon() = stopRealBeacon("Stopped by user")
+
+    private fun stopRealBeacon(reason: String) {
         if (permissionsGranted()) {
             runCatching { advertiser?.stopAdvertising(realAdvertiseCallback) }
         }
-        if (_realBeaconActive.value) appendLog("REAL TX stopped")
+        val wasActive = _realBeaconActive.value
+        cancelRealJobs()
         _realBeaconActive.value = false
-        _realStatus.value = "Real BLE test beacon stopped"
+        if (wasActive) appendLog("REAL TX stopped · $reason")
+        _realStatus.value = "Real BLE test stopped · $reason"
+    }
+
+    private fun startElapsedCounter() {
+        realElapsedJob?.cancel()
+        realElapsedJob = viewModelScope.launch {
+            while (_realBeaconActive.value) {
+                delay(1000)
+                if (_realBeaconActive.value) {
+                    _elapsedSeconds.value += 1
+                }
+            }
+        }
+    }
+
+    private fun cancelRealJobs() {
+        realTimeoutJob?.cancel()
+        realTimeoutJob = null
+        realElapsedJob?.cancel()
+        realElapsedJob = null
     }
 
     fun setBrand(brand: BleSpamBrand) {
@@ -236,7 +311,7 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         stopSimulation()
-        stopRealBeacon()
+        stopRealBeacon("ViewModel cleared")
         super.onCleared()
     }
 }
