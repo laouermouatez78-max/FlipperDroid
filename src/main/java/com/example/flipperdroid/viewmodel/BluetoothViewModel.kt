@@ -11,8 +11,13 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+
 
 data class BleDeviceInfo(
     val name: String,
@@ -40,6 +45,7 @@ class BluetoothViewModel : ViewModel() {
     private var adapter: BluetoothAdapter? = null
     private var scanning = false
     private var activeGatt: BluetoothGatt? = null
+    private var scanTimeoutJob: Job? = null
 
     private val _devices = MutableStateFlow<List<BleDeviceInfo>>(emptyList())
     val devices: StateFlow<List<BleDeviceInfo>> = _devices
@@ -75,8 +81,9 @@ class BluetoothViewModel : ViewModel() {
         refreshPermissionState()
         _status.value = when {
             adapter == null -> "Bluetooth LE unavailable"
-            adapter?.isEnabled != true -> "Bluetooth is off"
-            else -> "BLE scanner ready"
+            !_permissionsGranted.value -> "Bluetooth permission required"
+            !isBluetoothEnabled() -> "Bluetooth is off"
+            else -> "BLE Explorer ready"
         }
     }
 
@@ -86,6 +93,9 @@ class BluetoothViewModel : ViewModel() {
             ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
         }
     }
+
+    @SuppressLint("MissingPermission")
+    private fun isBluetoothEnabled(): Boolean = runCatching { adapter?.isEnabled == true }.getOrDefault(false)
 
     @SuppressLint("MissingPermission")
     fun startScan() {
@@ -98,31 +108,57 @@ class BluetoothViewModel : ViewModel() {
             _status.value = "Bluetooth LE unavailable"
             return
         }
-        if (!bluetoothAdapter.isEnabled) {
+        if (!isBluetoothEnabled()) {
             _status.value = "Turn Bluetooth on, then scan again"
             return
         }
-        val scanner = bluetoothAdapter.bluetoothLeScanner ?: run {
+        val scanner = runCatching { bluetoothAdapter.bluetoothLeScanner }.getOrNull() ?: run {
             _status.value = "BLE scanner unavailable"
             return
         }
 
-        stopScan()
+        stopScan(updateStatus = false)
         _devices.value = emptyList()
         scanning = true
         _isScanning.value = true
         _status.value = "Scanning nearby BLE advertisements…"
-        val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
-        scanner.startScan(null, settings, scanCallback)
+
+        val settings = ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
+
+        runCatching { scanner.startScan(null, settings, scanCallback) }
+            .onFailure {
+                scanning = false
+                _isScanning.value = false
+                _status.value = "BLE scan could not start: ${it.message ?: it.javaClass.simpleName}"
+                return
+            }
+
+        scanTimeoutJob?.cancel()
+        scanTimeoutJob = viewModelScope.launch {
+            delay(12_000)
+            if (scanning) {
+                stopScan(updateStatus = false)
+                _status.value = "Scan complete · ${_devices.value.size} device(s) found"
+            }
+        }
     }
 
     @SuppressLint("MissingPermission")
-    fun stopScan() {
+    fun stopScan() = stopScan(updateStatus = true)
+
+    @SuppressLint("MissingPermission")
+    private fun stopScan(updateStatus: Boolean) {
+        scanTimeoutJob?.cancel()
+        scanTimeoutJob = null
         if (!scanning) return
         runCatching { adapter?.bluetoothLeScanner?.stopScan(scanCallback) }
         scanning = false
         _isScanning.value = false
-        _status.value = "Scan stopped · ${_devices.value.size} device(s)"
+        if (updateStatus) {
+            _status.value = "Scan stopped · ${_devices.value.size} device(s)"
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -132,12 +168,24 @@ class BluetoothViewModel : ViewModel() {
             _status.value = "Bluetooth connect permission required"
             return
         }
-        val context = appContext ?: return
-        val bt = adapter ?: return
-        stopScan()
-        disconnectGatt()
+        val context = appContext ?: run {
+            _status.value = "BLE Explorer not initialized"
+            return
+        }
+        val bt = adapter ?: run {
+            _status.value = "Bluetooth adapter unavailable"
+            return
+        }
+        if (!isBluetoothEnabled()) {
+            _status.value = "Turn Bluetooth on before connecting"
+            return
+        }
+
+        stopScan(updateStatus = false)
+        disconnectGatt(updateStatus = false)
         _status.value = "Connecting to $address…"
         _gattServices.value = emptyList()
+
         runCatching {
             val device = bt.getRemoteDevice(address)
             activeGatt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -147,17 +195,21 @@ class BluetoothViewModel : ViewModel() {
                 device.connectGatt(context, false, gattCallback)
             }
         }.onFailure {
-            _status.value = "GATT connection error: ${it.message}"
+            _status.value = "GATT connection error: ${it.message ?: it.javaClass.simpleName}"
         }
     }
 
+    fun disconnectGatt() = disconnectGatt(updateStatus = true)
+
     @SuppressLint("MissingPermission")
-    fun disconnectGatt() {
-        runCatching { activeGatt?.disconnect() }
-        runCatching { activeGatt?.close() }
+    private fun disconnectGatt(updateStatus: Boolean) {
+        val gatt = activeGatt
         activeGatt = null
+        runCatching { gatt?.disconnect() }
+        runCatching { gatt?.close() }
         _connectedAddress.value = null
         _gattServices.value = emptyList()
+        if (updateStatus && gatt != null) _status.value = "GATT disconnected"
     }
 
     private val scanCallback = object : ScanCallback() {
@@ -180,20 +232,32 @@ class BluetoothViewModel : ViewModel() {
         }
 
         override fun onScanFailed(errorCode: Int) {
+            scanTimeoutJob?.cancel()
+            scanTimeoutJob = null
             scanning = false
             _isScanning.value = false
-            _status.value = "BLE scan failed (code $errorCode)"
+            _status.value = "BLE scan failed · ${scanError(errorCode)}"
         }
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                _status.value = "GATT error · status $status"
+                _connectedAddress.value = null
+                _gattServices.value = emptyList()
+                runCatching { gatt.close() }
+                if (activeGatt === gatt) activeGatt = null
+                return
+            }
+
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
                     _connectedAddress.value = gatt.device.address
                     _status.value = "Connected · discovering GATT services…"
-                    runCatching { gatt.discoverServices() }
+                    val started = runCatching { gatt.discoverServices() }.getOrDefault(false)
+                    if (!started) _status.value = "Connected, but service discovery could not start"
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     _status.value = "GATT disconnected"
@@ -230,9 +294,17 @@ class BluetoothViewModel : ViewModel() {
         }
     }
 
+    private fun scanError(code: Int): String = when (code) {
+        ScanCallback.SCAN_FAILED_ALREADY_STARTED -> "scan already started"
+        ScanCallback.SCAN_FAILED_APPLICATION_REGISTRATION_FAILED -> "Bluetooth registration failed"
+        ScanCallback.SCAN_FAILED_INTERNAL_ERROR -> "Bluetooth stack internal error"
+        ScanCallback.SCAN_FAILED_FEATURE_UNSUPPORTED -> "BLE scan unsupported"
+        else -> "code $code"
+    }
+
     override fun onCleared() {
-        stopScan()
-        disconnectGatt()
+        stopScan(updateStatus = false)
+        disconnectGatt(updateStatus = false)
         super.onCleared()
     }
 }
