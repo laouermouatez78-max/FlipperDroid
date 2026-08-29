@@ -1,0 +1,8 @@
+package com.example.flipperdroid.model.enums
+
+enum class AdvertisementSetType {
+    ADVERTISEMENT_TYPE_UNDEFINED,
+    ADVERTISEMENT_TYPE_CONTINUITY_NEW_DEVICE,
+    ADVERTISEMENT_TYPE_EASY_SETUP_WATCH,
+    ADVERTISEMENT_TYPE_EASY_SETUP_BUDS,
+}
