@@ -1,6 +1,7 @@
 package com.example.flipperdroid.viewmodel
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
@@ -14,11 +15,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /**
- * V3 USB/HID lab.
+ * V4 USB/HID training lab.
  *
- * Legacy versions wrote HID keyboard reports to a USB endpoint. V3 keeps the same
- * authoring workflow but validates and simulates scripts locally. No keystrokes are
- * injected into a connected computer.
+ * The lab validates and simulates HID-style scripts locally. It never injects
+ * keystrokes into a connected computer.
  */
 class BadUsbViewModel : ViewModel() {
 
@@ -31,7 +31,7 @@ class BadUsbViewModel : ViewModel() {
     private val _currentScript = MutableStateFlow("")
     val currentScript: StateFlow<String> = _currentScript
 
-    private val _status = MutableStateFlow("USB Lab not initialized")
+    private val _status = MutableStateFlow("USB HID Lab not initialized")
     val status: StateFlow<String> = _status
 
     private val _previewLog = MutableStateFlow<List<String>>(emptyList())
@@ -41,32 +41,32 @@ class BadUsbViewModel : ViewModel() {
 
     fun initialize(context: Context) {
         usbManager = context.getSystemService(Context.USB_SERVICE) as? UsbManager
-        _isUsbHostAvailable.value = usbManager != null
+        _isUsbHostAvailable.value = context.packageManager.hasSystemFeature(PackageManager.FEATURE_USB_HOST)
         _status.value = if (_isUsbHostAvailable.value) {
-            "USB Host available — simulation ready"
+            "USB Host detected · local HID simulation ready"
         } else {
-            "USB Host not supported on this device"
+            "USB Host is not supported on this phone · local simulation still available"
         }
     }
 
-    /** Retained for compatibility with legacy activity code; no endpoint is claimed. */
+    /** Retained for compatibility with USB inspection flows; no endpoint is claimed. */
     fun connectUsb(device: UsbDevice, connection: UsbDeviceConnection) {
         connection.close()
         _isConnected.value = true
-        _status.value = "Detected USB device ${device.vendorId}:${device.productId} — safe lab session"
-        appendLog("USB device detected; HID injection disabled in V3")
+        _status.value = "USB device ${device.vendorId}:${device.productId} detected · safe lab session"
+        appendLog("USB device detected; HID injection remains disabled in V4")
     }
 
     fun startLabSession() {
         _isConnected.value = true
         _status.value = "USB HID simulation session active"
-        appendLog("LAB session started")
+        appendLog("V4 LAB session started")
     }
 
     fun disconnect() {
         _isConnected.value = false
-        _status.value = "USB lab session stopped"
-        appendLog("LAB session stopped")
+        _status.value = "USB HID lab session stopped"
+        appendLog("V4 LAB session stopped")
     }
 
     fun updateScript(script: String) {
@@ -93,7 +93,7 @@ class BadUsbViewModel : ViewModel() {
                     delay(35)
                 }
             }
-            _status.value = "Simulation complete — no USB keystrokes were sent"
+            _status.value = "Simulation complete · no USB keystrokes were sent"
         }
     }
 
