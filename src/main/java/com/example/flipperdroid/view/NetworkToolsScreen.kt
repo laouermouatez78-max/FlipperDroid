@@ -1,41 +1,17 @@
 package com.example.flipperdroid.view
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.NetworkPing
-import androidx.compose.material.icons.filled.Timeline
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -65,7 +41,7 @@ fun NetworkToolsScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.clearResults() }) {
+                    IconButton(onClick = viewModel::clearResults, enabled = results.isNotEmpty()) {
                         Icon(Icons.Default.Clear, contentDescription = "Clear results")
                     }
                 }
@@ -73,80 +49,151 @@ fun NetworkToolsScreen(
         }
     ) { paddingValues ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(paddingValues).padding(16.dp)
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                "Targeted connectivity checks for devices and hosts you own or are authorized to assess.",
-                style = MaterialTheme.typography.bodyMedium
-            )
-            Spacer(Modifier.height(12.dp))
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                    ) {
+                        Icon(
+                            Icons.Default.Router,
+                            contentDescription = null,
+                            modifier = Modifier.padding(10.dp).size(28.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("Rootless Android diagnostics", fontWeight = FontWeight.Bold)
+                        Text(
+                            "V4 uses standard Android networking APIs. No root, no su, and no dependency on the old bundled Nmap path.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
 
             OutlinedTextField(
                 value = host,
-                onValueChange = { host = it.trim() },
+                onValueChange = { host = it.take(253) },
                 label = { Text("Hostname or IP address") },
-                supportingText = { Text("Example: router.local or 192.168.1.1") },
+                supportingText = { Text("Example: router.local or 192.168.1.1 · use only authorized targets") },
+                leadingIcon = { Icon(Icons.Default.Dns, contentDescription = null) },
+                trailingIcon = {
+                    if (host.isNotBlank()) {
+                        IconButton(onClick = { host = "" }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear target")
+                        }
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                enabled = !isScanning
             )
 
-            Spacer(Modifier.height(12.dp))
+            if (isScanning) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
 
             LazyColumn(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(bottom = 8.dp)
             ) {
                 item {
                     DiagnosticCard(
-                        title = "Ping",
-                        subtitle = "Check whether the selected host is reachable.",
-                        icon = { Icon(Icons.Default.NetworkPing, contentDescription = null) },
-                        enabled = host.isNotBlank(),
+                        title = "Reachability",
+                        subtitle = "Resolve the target and run a short reachability check.",
+                        icon = Icons.Default.NetworkPing,
+                        enabled = host.isNotBlank() && !isScanning,
                         onClick = { viewModel.ping(host) }
                     )
                 }
                 item {
                     DiagnosticCard(
                         title = "DNS Lookup",
-                        subtitle = "Resolve a hostname to its addresses.",
-                        icon = { Icon(Icons.Default.Language, contentDescription = null) },
-                        enabled = host.isNotBlank(),
+                        subtitle = "Resolve the selected hostname to its current IP addresses.",
+                        icon = Icons.Default.Language,
+                        enabled = host.isNotBlank() && !isScanning,
                         onClick = { viewModel.dnsLookup(host) }
                     )
                 }
                 item {
                     DiagnosticCard(
-                        title = "Route Check",
-                        subtitle = "Run the app's reachability/path diagnostic.",
-                        icon = { Icon(Icons.Default.Timeline, contentDescription = null) },
-                        enabled = host.isNotBlank(),
+                        title = "Android Route Check",
+                        subtitle = "Show interface, gateway, DNS and validation state for the active route.",
+                        icon = Icons.Default.Route,
+                        enabled = host.isNotBlank() && !isScanning,
                         onClick = { viewModel.traceroute(host) }
+                    )
+                }
+                item {
+                    DiagnosticCard(
+                        title = "Common Services",
+                        subtitle = "Check only six common TCP services on the explicit target.",
+                        icon = Icons.Default.Lan,
+                        enabled = host.isNotBlank() && !isScanning,
+                        onClick = { viewModel.checkCommonServices(host) }
                     )
                 }
 
                 if (results.isNotEmpty()) {
                     item {
-                        Spacer(Modifier.height(4.dp))
-                        Text("Results", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text("RESULTS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                            HorizontalDivider(modifier = Modifier.weight(1f))
+                        }
                     }
                 }
 
                 items(results) { result ->
-                    val container = if (result.isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant
-                    val content = if (result.isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                    val container = if (result.isError) {
+                        MaterialTheme.colorScheme.errorContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    }
+                    val content = if (result.isError) {
+                        MaterialTheme.colorScheme.onErrorContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
                     ElevatedCard(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.elevatedCardColors(containerColor = container)
                     ) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(result.command, style = MaterialTheme.typography.titleSmall, color = content)
-                            Text(result.output, style = MaterialTheme.typography.bodySmall, color = content)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(
+                                    if (result.isError) Icons.Default.ErrorOutline else Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = if (result.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                                )
+                                Text(result.command, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = content)
+                            }
+                            Text(
+                                result.output,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = content
+                            )
                         }
                     }
                 }
             }
-
-            if (isScanning) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -155,15 +202,16 @@ fun NetworkToolsScreen(
 private fun DiagnosticCard(
     title: String,
     subtitle: String,
-    icon: @Composable () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     enabled: Boolean,
     onClick: () -> Unit
 ) {
     ElevatedCard(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
         ListItem(
-            headlineContent = { Text(title) },
+            headlineContent = { Text(title, fontWeight = FontWeight.SemiBold) },
             supportingContent = { Text(subtitle) },
-            leadingContent = icon
+            leadingContent = { Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+            trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null) }
         )
     }
 }
