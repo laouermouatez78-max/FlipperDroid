@@ -1,38 +1,14 @@
 package com.example.flipperdroid.view
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -51,11 +27,12 @@ fun NfcScreen(
     val logs by nfcViewModel.logs.collectAsState()
     var showHistory by remember { mutableStateOf(false) }
     var showLogs by remember { mutableStateOf(false) }
+    var cloneUid by remember { mutableStateOf("") }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("NFC Reader · V2") },
+                title = { Text("NFC") },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -63,7 +40,7 @@ fun NfcScreen(
                 },
                 actions = {
                     IconButton(onClick = { showHistory = !showHistory }) {
-                        Icon(Icons.Default.History, contentDescription = "History")
+                        Icon(Icons.Default.ContentCopy, contentDescription = "History")
                     }
                     IconButton(onClick = { showLogs = !showLogs }) {
                         Icon(Icons.Default.Save, contentDescription = "Logs")
@@ -72,89 +49,81 @@ fun NfcScreen(
             )
         }
     ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
+        Column(
+            Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(16.dp)
         ) {
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Current tag", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text("UID: ${currentTagUid ?: "Waiting for a tag…"}", fontFamily = FontFamily.Monospace)
-                        Text("Type: ${currentTagType ?: "-"}")
-                    }
-                }
-            }
-
-            if (currentTagDump.isNotEmpty()) {
-                item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Tag data", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            currentTagDump.forEach { line ->
-                                Text(line, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+            // Section Lecture
+            Card(Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Card Reading", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Text("UID: ${currentTagUid ?: "-"}")
+                    Text("Type: ${currentTagType ?: "-"}")
+                    if (currentTagDump.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text("Dump:", fontWeight = FontWeight.Bold)
+                        LazyColumn(Modifier.heightIn(max = 200.dp)) {
+                            items(currentTagDump.size) { i ->
+                                Text(currentTagDump[i], fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
                             }
-                            Button(onClick = { nfcViewModel.onDumpExport() }) {
-                                Icon(Icons.Default.Save, contentDescription = null)
-                                Spacer(Modifier.width(6.dp))
-                                Text("Export scan")
-                            }
+                        }
+                        Button(onClick = { nfcViewModel.onDumpExport() }, Modifier.padding(top = 8.dp)) {
+                            Icon(Icons.Default.Save, contentDescription = "Export")
+                            Spacer(Modifier.width(4.dp))
+                            Text("Export dump")
                         }
                     }
                 }
             }
-
+            // Section Clonage
+            Card(Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("UID Cloning", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = cloneUid,
+                        onValueChange = { cloneUid = it },
+                        label = { Text("New UID") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Button(onClick = { nfcViewModel.onCloneUid(cloneUid) }, Modifier.padding(top = 8.dp)) {
+                        Text("Clone UID to card")
+                    }
+                }
+            }
+            // Section Logs
             if (showLogs) {
-                item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Logs", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                IconButton(onClick = { nfcViewModel.clearLogs() }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Clear logs")
-                                }
+                Card(Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("Logs", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        LazyColumn(Modifier.heightIn(max = 150.dp)) {
+                            items(logs.size) { i ->
+                                Text(logs[i], fontSize = MaterialTheme.typography.bodySmall.fontSize)
                             }
-                            if (logs.isEmpty()) {
-                                Text("No logs yet.")
-                            } else {
-                                logs.takeLast(50).forEach { log ->
-                                    Text(log, style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
+                        }
+                        Button(onClick = { nfcViewModel.clearLogs() }, Modifier.padding(top = 8.dp)) {
+                            Text("Clear logs")
                         }
                     }
                 }
             }
-
+            // Section Historique
             if (showHistory) {
-                item {
-                    Text("Scan history", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                }
-                if (scanHistory.isEmpty()) {
-                    item { Text("No scans yet.") }
-                } else {
-                    items(scanHistory.asReversed()) { scan ->
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(12.dp)) {
-                                Text(scan.timestamp, style = MaterialTheme.typography.labelMedium)
-                                Text("UID: ${scan.uid ?: "-"}", fontFamily = FontFamily.Monospace)
-                                Text("Type: ${scan.type ?: "-"}")
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("Scan History", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        LazyColumn(Modifier.heightIn(max = 150.dp)) {
+                            items(scanHistory.size) { i ->
+                                val scan = scanHistory[scanHistory.size - 1 - i]
+                                Text("${scan.timestamp} - UID: ${scan.uid ?: "-"} - Type: ${scan.type ?: "-"}")
                             }
                         }
                     }
                 }
-            }
-
-            item {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "V2 NFC is intentionally limited to reading, inspection, history and export. Use only with tags you own or are authorized to inspect.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }
