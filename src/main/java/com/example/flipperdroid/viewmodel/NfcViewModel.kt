@@ -1,15 +1,20 @@
 package com.example.flipperdroid.viewmodel
 
 import android.app.Application
+import android.nfc.NdefMessage
+import android.nfc.NdefRecord
 import android.nfc.Tag
 import android.nfc.tech.MifareClassic
 import android.nfc.tech.Ndef
 import android.os.Environment
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.flipperdroid.nfc.MifareClassicUtils
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -38,10 +43,6 @@ class NfcViewModel(app: Application) : AndroidViewModel(app) {
     private val _logs = MutableStateFlow<List<String>>(emptyList())
     val logs: StateFlow<List<String>> = _logs.asStateFlow()
 
-    /**
-     * V3 performs a metadata-only scan by default. Memory blocks are read only after an
-     * explicit action in the NFC screen.
-     */
     fun onTagScanned(tag: Tag) {
         _lastTag.value = tag
         val id = tag.id?.let { MifareClassicUtils.bytesToHex(it) } ?: "-"
@@ -49,21 +50,70 @@ class NfcViewModel(app: Application) : AndroidViewModel(app) {
         _currentTagUid.value = id
         _currentTagType.value = tech
         _currentTagDump.value = emptyList()
-
-        _ndefSummary.value = runCatching {
-            val message = Ndef.get(tag)?.cachedNdefMessage
-            message?.records?.mapIndexed { index, record ->
-                val type = record.type?.toString(Charsets.UTF_8).orEmpty().ifBlank { "unknown" }
-                "Record ${index + 1}: TNF=${record.tnf}, type=$type, payload=${record.payload?.size ?: 0} bytes"
-            }.orEmpty()
-        }.getOrDefault(emptyList())
+        refreshNdefSummary(tag)
 
         val timestamp = now()
         _scanHistory.value = (_scanHistory.value + NfcScanResult(timestamp, id, tech, emptyList())).takeLast(100)
         addLog("Tag detected UID=$id · metadata only")
     }
 
-    /** Explicit MIFARE Classic dump for authorized tags. */
+    private fun refreshNdefSummary(tag: Tag) {
+        _ndefSummary.value = runCatching {
+            val ndef = Ndef.get(tag)
+            val message = ndef?.cachedNdefMessage
+            val records = message?.records?.mapIndexed { index, record ->
+                val type = record.type?.toString(Charsets.UTF_8).orEmpty().ifBlank { "unknown" }
+                "Record ${index + 1}: TNF=${record.tnf}, type=$type, payload=${record.payload?.size ?: 0} bytes"
+            }.orEmpty().toMutableList()
+            if (ndef != null) {
+                records.add(0, "Writable=${ndef.isWritable} · maxSize=${ndef.maxSize} bytes")
+            }
+            records
+        }.getOrDefault(emptyList())
+    }
+
+    fun writeNdefText(text: String) {
+        val clean = text.trim()
+        if (clean.isEmpty()) return addLog("Enter text before writing NDEF.")
+        val tag = _lastTag.value ?: return addLog("Scan an NDEF tag first.")
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val ndef = Ndef.get(tag)
+            if (ndef == null) {
+                addLog("This tag does not expose writable NDEF technology.")
+                return@launch
+            }
+
+            val language = "en".toByteArray(Charsets.US_ASCII)
+            val textBytes = clean.toByteArray(Charsets.UTF_8)
+            val payload = ByteArray(1 + language.size + textBytes.size)
+            payload[0] = language.size.toByte()
+            System.arraycopy(language, 0, payload, 1, language.size)
+            System.arraycopy(textBytes, 0, payload, 1 + language.size, textBytes.size)
+            val record = NdefRecord(NdefRecord.TNF_WELL_KNOWN, NdefRecord.RTD_TEXT, ByteArray(0), payload)
+            val message = NdefMessage(arrayOf(record))
+
+            try {
+                ndef.connect()
+                if (!ndef.isWritable) {
+                    addLog("Tag is NDEF but read-only.")
+                    return@launch
+                }
+                if (message.toByteArray().size > ndef.maxSize) {
+                    addLog("Text is too large for this tag (${message.toByteArray().size}/${ndef.maxSize} bytes).")
+                    return@launch
+                }
+                ndef.writeNdefMessage(message)
+                addLog("NDEF text written successfully (${textBytes.size} bytes).")
+                refreshNdefSummary(tag)
+            } catch (e: Exception) {
+                addLog("NDEF write failed: ${e.message}")
+            } finally {
+                runCatching { ndef.close() }
+            }
+        }
+    }
+
     fun readMifareDump() {
         val tag = _lastTag.value ?: return addLog("Scan a tag first.")
         val mfc = MifareClassic.get(tag) ?: return addLog("This tag is not MIFARE Classic.")
@@ -75,15 +125,11 @@ class NfcViewModel(app: Application) : AndroidViewModel(app) {
 
             for (sector in 0 until mfc.sectorCount) {
                 val blockCount = mfc.getBlockCountInSector(sector)
-                val authenticated = runCatching {
-                    mfc.authenticateSectorWithKeyA(sector, key)
-                }.getOrDefault(false)
-
+                val authenticated = runCatching { mfc.authenticateSectorWithKeyA(sector, key) }.getOrDefault(false)
                 if (!authenticated) {
                     repeat(blockCount) { dump += MifareClassicUtils.NO_DATA }
                     continue
                 }
-
                 val firstBlock = mfc.sectorToBlock(sector)
                 repeat(blockCount) { offset ->
                     val block = runCatching { mfc.readBlock(firstBlock + offset) }.getOrNull()
@@ -108,14 +154,14 @@ class NfcViewModel(app: Application) : AndroidViewModel(app) {
         val uid = _currentTagUid.value ?: return addLog("Nothing to export: scan a tag first.")
         val app = getApplication<Application>()
         val baseDir = app.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS) ?: app.filesDir
-        val exportDir = File(baseDir, "FlipperDroidV3").apply { mkdirs() }
+        val exportDir = File(baseDir, "FlipperDroidV4").apply { mkdirs() }
         val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val safeUid = uid.replace(Regex("[^A-Za-z0-9_-]"), "_")
         val file = File(exportDir, "nfc_${safeUid}_$stamp.txt")
 
         runCatching {
             file.bufferedWriter().use { writer ->
-                writer.appendLine("FlipperDroid V3 NFC export")
+                writer.appendLine("FlipperDroid V4 NFC export")
                 writer.appendLine("Timestamp: ${now()}")
                 writer.appendLine("UID: $uid")
                 writer.appendLine("Type: ${_currentTagType.value ?: "Unknown"}")
@@ -124,16 +170,11 @@ class NfcViewModel(app: Application) : AndroidViewModel(app) {
                 writer.appendLine("Memory blocks: ${_currentTagDump.value.size}")
                 _currentTagDump.value.forEachIndexed { index, line -> writer.appendLine("$index: $line") }
             }
-        }.onSuccess {
-            addLog("Export saved: ${file.absolutePath}")
-        }.onFailure { error ->
-            addLog("Export failed: ${error.message}")
-        }
+        }.onSuccess { addLog("Export saved: ${file.absolutePath}") }
+            .onFailure { error -> addLog("Export failed: ${error.message}") }
     }
 
-    fun clearLogs() {
-        _logs.value = emptyList()
-    }
+    fun clearLogs() { _logs.value = emptyList() }
 
     fun addLog(msg: String) {
         _logs.value = (_logs.value + "[${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())}] $msg").takeLast(200)
