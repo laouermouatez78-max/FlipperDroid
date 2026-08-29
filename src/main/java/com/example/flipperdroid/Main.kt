@@ -3,13 +3,8 @@ package com.example.flipperdroid
 import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.content.Intent
-import android.content.IntentFilter
 import android.nfc.NfcAdapter
 import android.nfc.Tag
-import android.nfc.tech.NfcA
-import android.nfc.tech.NfcB
-import android.nfc.tech.NfcF
-import android.nfc.tech.NfcV
 import android.os.Build
 import android.os.Bundle
 import android.os.Parcelable
@@ -42,8 +37,6 @@ class MainActivity : ComponentActivity() {
 
     private var nfcAdapter: NfcAdapter? = null
     private var pendingIntent: PendingIntent? = null
-    private var intentFiltersArray: Array<IntentFilter> = emptyArray()
-    private var techListsArray: Array<Array<String>> = emptyArray()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,19 +64,6 @@ class MainActivity : ComponentActivity() {
             0,
             launchIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or mutabilityFlag
-        )
-        intentFiltersArray = arrayOf(
-            IntentFilter(NfcAdapter.ACTION_TAG_DISCOVERED),
-            IntentFilter(NfcAdapter.ACTION_NDEF_DISCOVERED),
-            IntentFilter(NfcAdapter.ACTION_TECH_DISCOVERED)
-        )
-        techListsArray = arrayOf(
-            arrayOf(
-                NfcA::class.java.name,
-                NfcB::class.java.name,
-                NfcF::class.java.name,
-                NfcV::class.java.name
-            )
         )
     }
 
@@ -115,14 +95,15 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         val adapter = nfcAdapter ?: return
         val foregroundIntent = pendingIntent ?: return
-        if (adapter.isEnabled) {
-            adapter.enableForegroundDispatch(this, foregroundIntent, intentFiltersArray, techListsArray)
+        if (runCatching { adapter.isEnabled }.getOrDefault(false)) {
+            // null filters + null tech lists = receive every foreground NFC tag as ACTION_TAG_DISCOVERED.
+            adapter.enableForegroundDispatch(this, foregroundIntent, null, null)
         }
     }
 
     override fun onPause() {
         super.onPause()
-        nfcAdapter?.disableForegroundDispatch(this)
+        runCatching { nfcAdapter?.disableForegroundDispatch(this) }
     }
 
     @SuppressLint("ComposableDestinationInComposeScope")
