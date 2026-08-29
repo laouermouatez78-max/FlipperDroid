@@ -7,9 +7,13 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+
+private val ColorCompatOrangeContainer = Color(0xFFFFE0C7)
+private val ColorCompatBlue = Color(0xFF2E6E9E)
 
 private val FlipperDarkColorScheme = darkColorScheme(
     primary = FlipperOrange,
@@ -49,9 +53,6 @@ private val FlipperLightColorScheme = lightColorScheme(
     outline = FlipperLine,
     error = FlipperError
 )
-
-private val ColorCompatOrangeContainer = androidx.compose.ui.graphics.Color(0xFFFFE0C7)
-private val ColorCompatBlue = androidx.compose.ui.graphics.Color(0xFF2E6E9E)
 
 @Composable
 fun FlipperDroidTheme(
