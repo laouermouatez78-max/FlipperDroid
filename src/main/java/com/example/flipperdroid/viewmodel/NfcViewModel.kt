@@ -2,18 +2,19 @@ package com.example.flipperdroid.viewmodel
 
 import android.app.Application
 import android.nfc.Tag
+import android.os.Environment
 import androidx.lifecycle.AndroidViewModel
+import com.example.flipperdroid.nfc.MifareClassicUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import com.example.flipperdroid.nfc.MifareClassicUtils
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 class NfcViewModel(app: Application) : AndroidViewModel(app) {
 
-    // État du tag courant
     private val _currentTagUid = MutableStateFlow<String?>(null)
     val currentTagUid: StateFlow<String?> = _currentTagUid.asStateFlow()
 
@@ -23,78 +24,96 @@ class NfcViewModel(app: Application) : AndroidViewModel(app) {
     private val _currentTagDump = MutableStateFlow<List<String>>(emptyList())
     val currentTagDump: StateFlow<List<String>> = _currentTagDump.asStateFlow()
 
-    // Historique des scans
     private val _scanHistory = MutableStateFlow<List<NfcScanResult>>(emptyList())
     val scanHistory: StateFlow<List<NfcScanResult>> = _scanHistory.asStateFlow()
 
-    // Logs/feedback
     private val _logs = MutableStateFlow<List<String>>(emptyList())
     val logs: StateFlow<List<String>> = _logs.asStateFlow()
 
-    // Actions principales
     fun onTagScanned(tag: Tag) {
-        // Lecture UID
         val id = tag.id?.let { MifareClassicUtils.bytesToHex(it) } ?: "-"
         _currentTagUid.value = id
-        _currentTagType.value = "Mifare Classic"
-        // Dump rapide avec la clé par défaut sur tous les secteurs
+        _currentTagType.value = tag.techList.joinToString().ifBlank { "Unknown" }
+
         val dump = mutableListOf<String>()
         val mfc = android.nfc.tech.MifareClassic.get(tag)
+
         if (mfc != null) {
             try {
                 mfc.connect()
-                val sectorCount = mfc.sectorCount
-                for (sector in 0 until sectorCount) {
+                for (sector in 0 until mfc.sectorCount) {
                     val key = MifareClassicUtils.hexToBytes(MifareClassicUtils.DEFAULT_KEY) ?: continue
-                    val auth = mfc.authenticateSectorWithKeyA(sector, key)
-                    if (auth) {
+                    val authenticated = mfc.authenticateSectorWithKeyA(sector, key)
+                    val blockCount = mfc.getBlockCountInSector(sector)
+
+                    if (authenticated) {
                         val firstBlock = mfc.sectorToBlock(sector)
-                        val blockCount = mfc.getBlockCountInSector(sector)
-                        for (i in 0 until blockCount) {
-                            val blockBytes = try { mfc.readBlock(firstBlock + i) } catch (_: Exception) { null }
-                            dump.add(blockBytes?.let { MifareClassicUtils.bytesToHex(it) } ?: MifareClassicUtils.NO_DATA)
+                        repeat(blockCount) { offset ->
+                            val block = try {
+                                mfc.readBlock(firstBlock + offset)
+                            } catch (_: Exception) {
+                                null
+                            }
+                            dump.add(block?.let(MifareClassicUtils::bytesToHex) ?: MifareClassicUtils.NO_DATA)
                         }
                     } else {
-                        // Secteur non accessible avec la clé par défaut
-                        val blockCount = mfc.getBlockCountInSector(sector)
                         repeat(blockCount) { dump.add(MifareClassicUtils.NO_DATA) }
                     }
                 }
-                mfc.close()
             } catch (e: Exception) {
-                addLog("Erreur lecture tag: ${e.message}")
+                addLog("NFC read error: ${e.message}")
+            } finally {
+                runCatching { mfc.close() }
             }
         } else {
-            addLog("Tag non compatible MifareClassic")
+            addLog("Tag detected; MIFARE Classic block reading is not available for this tag type.")
         }
+
         _currentTagDump.value = dump
-        // Ajout à l'historique
         val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-        val scan = NfcScanResult(timestamp, id, "Mifare Classic", dump)
+        val scan = NfcScanResult(timestamp, id, _currentTagType.value, dump)
         _scanHistory.value = _scanHistory.value + scan
-        addLog("Tag scanné UID=$id, ${dump.size} blocks lus")
+        addLog("Tag scanned UID=$id (${dump.size} readable blocks)")
     }
-    fun onCloneUid(newUid: String) {
-        // Clonage UID (block 0) - nécessite une carte "magic"
-        val lastScan = _scanHistory.value.lastOrNull() ?: return addLog("Aucun tag scanné")
-        val tag = lastScan.uid?.let { _currentTagUid.value } ?: return addLog("Aucun tag scanné")
-        // On ne peut pas retrouver le Tag Android à partir de l'UID, donc cette fonction doit être appelée juste après un scan
-        // (dans une vraie app, il faudrait garder le dernier Tag en mémoire)
-        addLog("Clonage UID non supporté sans accès au Tag Android courant")
-        // Pour une vraie intégration, il faudrait passer le Tag Android courant à cette fonction
-    }
+
     fun onDumpExport() {
-        // TODO : export du dump courant
+        val uid = _currentTagUid.value ?: return addLog("Nothing to export: scan a tag first.")
+        val dump = _currentTagDump.value
+        val app = getApplication<Application>()
+        val baseDir = app.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS) ?: app.filesDir
+        val exportDir = File(baseDir, "FlipperDroidV2").apply { mkdirs() }
+        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val safeUid = uid.replace(Regex("[^A-Za-z0-9_-]"), "_")
+        val file = File(exportDir, "nfc_${safeUid}_$stamp.txt")
+
+        runCatching {
+            file.bufferedWriter().use { writer ->
+                writer.appendLine("FlipperDroid V2 NFC export")
+                writer.appendLine("Timestamp: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}")
+                writer.appendLine("UID: $uid")
+                writer.appendLine("Type: ${_currentTagType.value ?: "Unknown"}")
+                writer.appendLine("Blocks: ${dump.size}")
+                writer.appendLine()
+                dump.forEachIndexed { index, line ->
+                    writer.appendLine("$index: $line")
+                }
+            }
+        }.onSuccess {
+            addLog("Export saved: ${file.absolutePath}")
+        }.onFailure { error ->
+            addLog("Export failed: ${error.message}")
+        }
     }
+
     fun clearLogs() {
         _logs.value = emptyList()
     }
+
     fun addLog(msg: String) {
-        _logs.value = _logs.value + msg
+        _logs.value = (_logs.value + msg).takeLast(200)
     }
 }
 
-// Modèle pour l’historique
 data class NfcScanResult(
     val timestamp: String,
     val uid: String?,
