@@ -139,6 +139,7 @@ class MainActivity : ComponentActivity() {
             composable("home") { HomeScreen(navController, nfcViewModel) }
             composable("nfc") { NfcScreen(navController, nfcViewModel) }
             composable("badusb") { BadUsbScreen(navController, badUsbViewModel) }
+            composable("bluetooth_scan") { BluetoothScannerScreen(navController, bluetoothViewModel) }
             composable("bluetooth") { BleSpamScreen(navController, bleLabViewModel) }
             composable("network") { NetworkToolsScreen(navController, networkToolsViewModel) }
             composable("wifi_deauther") { WifiDeautherScreen(navController, wifiAuditViewModel) }
@@ -146,7 +147,7 @@ class MainActivity : ComponentActivity() {
             composable("password_generator") { PasswordGeneratorScreen(navController) }
             composable("qr_scanner") { QrScannerScreen(navController) }
             composable("device_status") { DeviceStatusScreen(navController) }
-            composable("emv_reader") { EmvReaderScreen(navController, emvReaderViewModel) }
+            composable("emv_reader") { EmvReaderScreen(navController, emvReaderViewModel, nfcViewModel) }
             composable("emv_emulation") {
                 EmvCardEmulationScreen(navController, emvCardEmulationViewModel)
             }
