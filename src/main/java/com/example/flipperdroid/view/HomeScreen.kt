@@ -61,8 +61,9 @@ fun HomeScreen(
     }
 
     val radioTools = listOf(
-        FeatureItem("NFC / RFID", "Read NFC tags, technologies and NDEF metadata.", Icons.Default.Nfc, "nfc"),
-        FeatureItem("BLE Lab", "Inspect BLE profiles and simulate controlled advertisement campaigns.", Icons.Default.Bluetooth, "bluetooth", true),
+        FeatureItem("NFC / RFID", "Read NFC metadata, NDEF and authorized MIFARE memory.", Icons.Default.Nfc, "nfc"),
+        FeatureItem("BLE Scanner", "Passive inventory of nearby Bluetooth LE advertisements.", Icons.Default.BluetoothSearching, "bluetooth_scan"),
+        FeatureItem("BLE Lab", "Inspect legacy BLE payload profiles in a controlled simulator.", Icons.Default.Bluetooth, "bluetooth", true),
         FeatureItem("Wi‑Fi Audit", "Scan nearby Wi‑Fi, signal, channel and security posture.", Icons.Default.Wifi, "wifi_deauther", true),
         FeatureItem("Infrared", "Transmit IR commands to devices you control.", Icons.Default.SettingsRemote, "ir")
     )
@@ -70,14 +71,14 @@ fun HomeScreen(
     val securityTools = listOf(
         FeatureItem("Network Toolkit", "DNS, ping, routes and authorized connectivity diagnostics.", Icons.Default.Router, "network"),
         FeatureItem("USB Lab", "Inspect USB HID and validate keyboard scripts without injecting them.", Icons.Default.Usb, "badusb", true),
-        FeatureItem("EMV Reader", "Inspect compatible contactless card metadata locally.", Icons.Default.CreditCard, "emv_reader"),
-        FeatureItem("EMV Lab", "Simulate EMV APDU flows using test data only.", Icons.Default.Contactless, "emv_emulation", true),
+        FeatureItem("EMV Reader", "Identify compatible contactless card application metadata only.", Icons.Default.CreditCard, "emv_reader"),
+        FeatureItem("EMV Lab", "Simulate synthetic ISO-DEP/APDU flows using test data.", Icons.Default.Contactless, "emv_emulation", true),
         FeatureItem("Password Generator", "Generate strong random passwords locally.", Icons.Default.Key, "password_generator"),
-        FeatureItem("QR Tools", "Inspect and work with QR payloads.", Icons.Default.QrCode, "qr_scanner")
+        FeatureItem("QR Tools", "Inspect and classify QR payload text locally.", Icons.Default.QrCode, "qr_scanner")
     )
 
     val appItems = listOf(
-        FeatureItem("Device Status", "Check NFC, BLE, Wi‑Fi, IR and Android capabilities.", Icons.Default.PhoneAndroid, "device_status"),
+        FeatureItem("Device Status", "Check NFC, BLE, Wi‑Fi, IR, USB and Android capabilities.", Icons.Default.PhoneAndroid, "device_status"),
         FeatureItem("Settings", "Theme and application preferences.", Icons.Default.Settings, "settings"),
         FeatureItem("About V3", "Version, modules, credits and lab safety model.", Icons.Default.Info, "about")
     )
@@ -113,7 +114,7 @@ fun HomeScreen(
                         Icon(Icons.Default.Security, contentDescription = null, modifier = Modifier.size(40.dp))
                         Column {
                             Text("V3 Full Toolbox", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text("All major V1/V2 modules are visible again, with cleaner permissions, safer defaults and clearer diagnostics.")
+                            Text("All major V1/V2 modules are visible again, with modern permissions, safer defaults and clearer diagnostics.")
                         }
                     }
                 }
