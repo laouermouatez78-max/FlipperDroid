@@ -20,6 +20,10 @@ V4 fixes the main weakness of V3: several screens looked like tools but only sim
 ### BLE Explorer
 - real BLE advertisement scan;
 - name, MAC/address, RSSI, connectability and advertised UUIDs;
+- decoded manufacturer-specific data and service data;
+- raw advertisement bytes and advertised TX power when Android exposes them;
+- per-device packet counters and observed advertisement-rate telemetry;
+- defensive elevated-rate indicator (observation only, not a malware/spam verdict);
 - real GATT connection to a selected connectable device;
 - service and characteristic discovery;
 - readable/writable/notifiable characteristic capability flags.
@@ -29,6 +33,8 @@ V4 fixes the main weakness of V3: several screens looked like tools but only sim
 - FlipperDroid V4 test service UUID;
 - configurable device name;
 - designed for testing between two devices you control.
+
+The BLE payload catalogue inherited from the historical project stays preview-only. Vendor impersonation, crash payloads and continuous BLE flooding are not wired to the real-radio path.
 
 ### Wi-Fi Analyzer
 - real `WifiManager` scan results;
