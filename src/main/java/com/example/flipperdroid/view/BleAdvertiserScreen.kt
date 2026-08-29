@@ -1,13 +1,12 @@
 package com.example.flipperdroid.view
 
-import android.Manifest
-import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
@@ -25,18 +24,21 @@ fun BleAdvertiserScreen(navController: NavController, viewModel: BleAdvertiserVi
     val active by viewModel.isAdvertising.collectAsState()
     val status by viewModel.status.collectAsState()
     val name by viewModel.localName.collectAsState()
+    var permissionsGranted by remember { mutableStateOf(viewModel.permissionsGranted()) }
 
-    val permissions = remember {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            arrayOf(Manifest.permission.BLUETOOTH_ADVERTISE, Manifest.permission.BLUETOOTH_CONNECT)
-        } else emptyArray()
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        permissionsGranted = viewModel.permissionsGranted()
+        if (permissionsGranted) viewModel.start()
     }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
+
+    DisposableEffect(Unit) {
+        onDispose { viewModel.stop() }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("BLE Advertiser · V4") },
+                title = { Text("BLE Test Beacon · V4") },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -55,10 +57,24 @@ fun BleAdvertiserScreen(navController: NavController, viewModel: BleAdvertiserVi
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Icon(Icons.Default.Bluetooth, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Column {
-                        Text("Real BLE test beacon", fontWeight = FontWeight.Bold)
-                        Text("Advertises a FlipperDroid V4 test UUID so another device you control can detect this phone.")
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                    ) {
+                        Icon(
+                            Icons.Default.Bluetooth,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(10.dp).size(28.dp)
+                        )
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("One normal BLE advertisement", fontWeight = FontWeight.Bold)
+                        Text(
+                            "Broadcast a FlipperDroid V4 test UUID so a second device you control can verify BLE discovery.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -66,39 +82,73 @@ fun BleAdvertiserScreen(navController: NavController, viewModel: BleAdvertiserVi
             OutlinedTextField(
                 value = name,
                 onValueChange = viewModel::updateName,
-                label = { Text("BLE device name") },
+                label = { Text("Temporary BLE device name") },
+                supportingText = { Text("V4 restores your original Bluetooth name when the beacon stops.") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !active
             )
 
-            Text("Status: $status", style = MaterialTheme.typography.bodyMedium)
-
-            if (!viewModel.canAdvertise()) {
-                Text("This phone does not report BLE advertising support.", color = MaterialTheme.colorScheme.error)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AssistChip(
+                    onClick = {},
+                    leadingIcon = if (permissionsGranted) {
+                        { Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                    } else null,
+                    label = { Text(if (permissionsGranted) "Permissions OK" else "Permissions required") }
+                )
+                AssistChip(
+                    onClick = {},
+                    label = { Text(if (viewModel.canAdvertise()) "Advertiser supported" else "Unsupported") }
+                )
             }
 
-            if (permissions.isNotEmpty()) {
-                OutlinedButton(onClick = { launcher.launch(permissions) }, modifier = Modifier.fillMaxWidth()) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceVariant
+            ) {
+                Text(status, modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium)
+            }
+
+            if (!permissionsGranted) {
+                OutlinedButton(
+                    onClick = { launcher.launch(viewModel.requiredPermissions()) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("Grant Bluetooth permissions")
                 }
             }
 
             Button(
-                onClick = { if (active) viewModel.stop() else viewModel.start() },
+                onClick = {
+                    if (active) {
+                        viewModel.stop()
+                    } else if (permissionsGranted) {
+                        viewModel.start()
+                    } else {
+                        launcher.launch(viewModel.requiredPermissions())
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = viewModel.canAdvertise()
+                enabled = active || viewModel.canAdvertise()
             ) {
                 Icon(if (active) Icons.Default.Stop else Icons.Default.PlayArrow, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text(if (active) "Stop advertiser" else "Start advertiser")
+                Text(if (active) "Stop beacon" else "Start test beacon")
             }
 
-            Text(
-                "Test: start advertising here, then scan with FlipperDroid V4 or another BLE scanner on your second phone. This is a normal BLE advertisement, not a flood.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f))
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("How to test", fontWeight = FontWeight.Bold)
+                    Text("1. Start the beacon on this phone.")
+                    Text("2. Open BLE Explorer on a second phone you control.")
+                    Text("3. Scan and look for the temporary device name / V4 service advertisement.")
+                }
+            }
         }
     }
 }
