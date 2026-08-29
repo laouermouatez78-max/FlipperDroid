@@ -131,7 +131,7 @@ class MainActivity : ComponentActivity() {
             composable("emv_reader") { EmvReaderScreen(navController, emvReaderViewModel, nfcViewModel) }
             composable("emv_emulation") { EmvCardEmulationScreen(navController, emvCardEmulationViewModel) }
             composable("settings") { SettingsScreen(navController, themeViewModel) }
-            composable("about") { V2AboutScreen(navController) }
+            composable("about") { V4AboutScreen(navController) }
             composable("legal_mit") { LegalTextScreen(navController, "legacy/mit.txt", "MIT License") }
             composable("legal_cgu") { LegalTextScreen(navController, "legacy/term_of_use.txt", "Terms of Use") }
             composable("legal_mentions") { LegalTextScreen(navController, "legacy/legacy_notice.txt", "Legal Notice") }
