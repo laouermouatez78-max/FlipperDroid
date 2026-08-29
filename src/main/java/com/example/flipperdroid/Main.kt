@@ -23,6 +23,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.flipperdroid.ui.theme.FlipperDroidTheme
+import com.example.flipperdroid.view.DeviceStatusScreen
 import com.example.flipperdroid.view.HomeScreen
 import com.example.flipperdroid.view.InfraredScreen
 import com.example.flipperdroid.view.LegalTextScreen
@@ -48,7 +49,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         configureNfc()
 
         setContent {
@@ -165,6 +165,9 @@ class MainActivity : ComponentActivity() {
             }
             composable("password_generator") {
                 PasswordGeneratorScreen(navController = navController)
+            }
+            composable("device_status") {
+                DeviceStatusScreen(navController = navController)
             }
             composable("settings") {
                 SettingsScreen(navController = navController, themeViewModel = themeViewModel)
