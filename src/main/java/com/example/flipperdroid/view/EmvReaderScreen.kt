@@ -17,16 +17,20 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.flipperdroid.viewmodel.EmvReaderViewModel
+import com.example.flipperdroid.viewmodel.NfcViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EmvReaderScreen(
     navController: NavController,
-    viewModel: EmvReaderViewModel
+    viewModel: EmvReaderViewModel,
+    nfcViewModel: NfcViewModel
 ) {
     val cardData by viewModel.cardData.collectAsState()
     val isReading by viewModel.isReading.collectAsState()
     val error by viewModel.error.collectAsState()
+    val lastTag by nfcViewModel.lastTag.collectAsState()
+    val lastUid by nfcViewModel.currentTagUid.collectAsState()
 
     Scaffold(
         topBar = {
@@ -54,9 +58,32 @@ fun EmvReaderScreen(
                     Icon(Icons.Default.Security, contentDescription = null)
                     Column {
                         Text("Privacy mode", fontWeight = FontWeight.Bold)
-                        Text("V3 identifies the contactless payment application only. PAN, expiry, cardholder name and Track 2 are not read or stored.")
+                        Text("V3 identifies only the contactless application/scheme and AID. PAN, expiry, cardholder name and Track 2 are not read or retained.")
                     }
                 }
+            }
+
+            if (lastTag != null) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("NFC tag ready", fontWeight = FontWeight.Bold)
+                        Text("UID: ${lastUid ?: "detected"}", fontFamily = FontFamily.Monospace)
+                        Button(
+                            onClick = { lastTag?.let(viewModel::readCard) },
+                            enabled = !isReading,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Contactless, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Read EMV metadata")
+                        }
+                    }
+                }
+            } else {
+                Text(
+                    "Present a contactless card once so Android detects the NFC tag, then return here to request metadata reading.",
+                    textAlign = TextAlign.Center
+                )
             }
 
             when {
@@ -96,17 +123,6 @@ fun EmvReaderScreen(
                         Spacer(Modifier.width(8.dp))
                         Text("Reset")
                     }
-                }
-
-                else -> {
-                    Spacer(Modifier.weight(0.25f))
-                    Icon(Icons.Default.Contactless, contentDescription = null, modifier = Modifier.size(72.dp))
-                    Text(
-                        "Open this screen and hold a contactless card near the phone. Only scheme/AID metadata will be retained in memory.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(Modifier.weight(1f))
                 }
             }
         }
