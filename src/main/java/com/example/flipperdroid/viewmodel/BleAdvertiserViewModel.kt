@@ -70,7 +70,6 @@ class BleAdvertiserViewModel(app: Application) : AndroidViewModel(app) {
 
     fun start() {
         if (_isAdvertising.value) return
-        val app = getApplication<Application>()
         if (!permissionsGranted()) {
             _status.value = "Bluetooth advertise/connect permission required"
             return
@@ -94,7 +93,10 @@ class BleAdvertiserViewModel(app: Application) : AndroidViewModel(app) {
         runCatching {
             previousAdapterName = runCatching { bt.name }.getOrNull()
             if (_localName.value.isNotBlank()) {
-                renamedAdapter = runCatching { bt.name = _localName.value }.getOrDefault(false)
+                renamedAdapter = runCatching {
+                    bt.name = _localName.value
+                    true
+                }.getOrDefault(false)
             }
 
             val settings = AdvertiseSettings.Builder()
