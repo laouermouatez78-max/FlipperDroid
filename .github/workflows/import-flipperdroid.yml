@@ -3,8 +3,6 @@ name: Import FlipperDroid upstream
 on:
   push:
     branches: [main]
-    paths:
-      - '.github/workflows/import-flipperdroid.yml'
   workflow_dispatch:
 
 permissions:
@@ -12,6 +10,7 @@ permissions:
 
 jobs:
   import-upstream:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout destination repository
