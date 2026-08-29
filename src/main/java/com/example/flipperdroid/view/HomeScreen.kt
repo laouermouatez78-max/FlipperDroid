@@ -1,140 +1,125 @@
 package com.example.flipperdroid.view
 
 import android.content.Context
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import androidx.navigation.NavController
-import com.example.flipperdroid.viewmodel.NfcViewModel
 
 data class FeatureItem(
     val title: String,
     val subtitle: String,
     val icon: ImageVector,
     val route: String,
-    val labOnly: Boolean = false
+    val badge: String = "ACTIVE"
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(
-    navController: NavController,
-    nfcViewModel: NfcViewModel
-) {
+fun HomeScreen(navController: NavController, nfcViewModel: com.example.flipperdroid.viewmodel.NfcViewModel) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("legal_prefs", Context.MODE_PRIVATE) }
-    var legalAccepted by remember { mutableStateOf(prefs.getBoolean("legalAcceptedV3", false)) }
+    var legalAccepted by remember { mutableStateOf(prefs.getBoolean("legalAcceptedV4", false)) }
 
     if (!legalAccepted) {
         AlertDialog(
             onDismissRequest = {},
             icon = { Icon(Icons.Default.Security, contentDescription = null) },
-            title = { Text("FlipperDroid V3 — Authorized Lab") },
+            title = { Text("FlipperDroid V4 · Owner Mode") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Use FlipperDroid only with hardware, tags, cards and networks you own or are explicitly authorized to test.")
-                    Text("V3 restores the complete toolbox. Sensitive modules run in controlled lab/simulation mode to prevent accidental disruption.")
-                    OutlinedButton(
-                        onClick = { navController.navigate("legal_cgu") },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Read Terms of Use") }
-                }
+                Text("Use active tools only with devices, tags and networks you own or are explicitly authorized to test. V4 replaces several V3 simulations with real Android-supported diagnostics and test functions.")
             },
             confirmButton = {
                 Button(onClick = {
-                    prefs.edit { putBoolean("legalAcceptedV3", true) }
+                    prefs.edit { putBoolean("legalAcceptedV4", true) }
                     legalAccepted = true
-                }) { Text("I understand") }
+                }) { Text("Enable V4") }
             }
         )
     }
 
-    val radioTools = listOf(
-        FeatureItem("NFC / RFID", "Read NFC metadata, NDEF and authorized MIFARE memory.", Icons.Default.Nfc, "nfc"),
-        FeatureItem("BLE Scanner", "Passive inventory of nearby Bluetooth LE advertisements.", Icons.Default.BluetoothSearching, "bluetooth_scan"),
-        FeatureItem("BLE Lab", "Inspect legacy BLE payload profiles in a controlled simulator.", Icons.Default.Bluetooth, "bluetooth", true),
-        FeatureItem("Wi‑Fi Audit", "Scan nearby Wi‑Fi, signal, channel and security posture.", Icons.Default.Wifi, "wifi_deauther", true),
-        FeatureItem("Infrared", "Transmit IR commands to devices you control.", Icons.Default.SettingsRemote, "ir")
+    val wireless = listOf(
+        FeatureItem("BLE Scanner", "Discover real BLE advertisements around you.", Icons.Default.BluetoothSearching, "bluetooth_scan"),
+        FeatureItem("BLE Advertiser", "Broadcast a V4 test beacon to another device you control.", Icons.Default.BluetoothAudio, "ble_advertiser"),
+        FeatureItem("Wi‑Fi Audit", "Inspect nearby SSID, BSSID, channel, RSSI and security.", Icons.Default.Wifi, "wifi_deauther"),
+        FeatureItem("LAN Analyzer", "Discover active hosts on your connected private /24.", Icons.Default.Lan, "lan_analyzer"),
+        FeatureItem("Network Toolkit", "DNS, ping, routes and targeted port checks.", Icons.Default.Router, "network")
     )
 
-    val securityTools = listOf(
-        FeatureItem("Network Toolkit", "DNS, ping, routes and authorized connectivity diagnostics.", Icons.Default.Router, "network"),
-        FeatureItem("USB Lab", "Inspect USB HID and validate keyboard scripts without injecting them.", Icons.Default.Usb, "badusb", true),
-        FeatureItem("EMV Reader", "Identify compatible contactless card application metadata only.", Icons.Default.CreditCard, "emv_reader"),
-        FeatureItem("EMV Lab", "Simulate synthetic ISO-DEP/APDU flows using test data.", Icons.Default.Contactless, "emv_emulation", true),
-        FeatureItem("Password Generator", "Generate strong random passwords locally.", Icons.Default.Key, "password_generator"),
-        FeatureItem("QR Tools", "Inspect and classify QR payload text locally.", Icons.Default.QrCode, "qr_scanner")
+    val hardware = listOf(
+        FeatureItem("NFC / RFID", "Read metadata/NDEF and authorized tag memory.", Icons.Default.Nfc, "nfc"),
+        FeatureItem("USB Inspector", "Inspect real OTG USB devices, interfaces and endpoints.", Icons.Default.Usb, "usb_inspector"),
+        FeatureItem("Infrared", "Transmit IR commands with compatible phones.", Icons.Default.SettingsRemote, "ir"),
+        FeatureItem("EMV Metadata", "Identify payment application metadata without exposing PAN/Track2.", Icons.Default.CreditCard, "emv_reader", "PRIVATE"),
+        FeatureItem("APDU Sandbox", "Synthetic ISO‑DEP/APDU experiments with test data.", Icons.Default.Contactless, "emv_emulation", "SANDBOX")
     )
 
-    val appItems = listOf(
-        FeatureItem("Device Status", "Check NFC, BLE, Wi‑Fi, IR, USB and Android capabilities.", Icons.Default.PhoneAndroid, "device_status"),
+    val utilities = listOf(
+        FeatureItem("QR Tools", "Analyze text and generate QR payloads locally.", Icons.Default.QrCode, "qr_scanner"),
+        FeatureItem("Password Generator", "Generate strong passwords on-device.", Icons.Default.Key, "password_generator"),
+        FeatureItem("Device Status", "Check NFC, BLE, Wi‑Fi, USB, IR and Android support.", Icons.Default.PhoneAndroid, "device_status"),
         FeatureItem("Settings", "Theme and application preferences.", Icons.Default.Settings, "settings"),
-        FeatureItem("About V3", "Version, modules, credits and lab safety model.", Icons.Default.Info, "about")
+        FeatureItem("About V4", "Version, modules and compatibility notes.", Icons.Default.Info, "about", "INFO")
     )
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("FlipperDroid V3", fontWeight = FontWeight.Bold)
-                        Text("Cybersecurity multi‑tool · authorized lab", style = MaterialTheme.typography.labelSmall)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            )
-        }
-    ) { paddingValues ->
+    Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(paddingValues),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surface)
+                    )
+                ),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(Icons.Default.Security, contentDescription = null, modifier = Modifier.size(40.dp))
-                        Column {
-                            Text("V3 Full Toolbox", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text("All major V1/V2 modules are visible again, with modern permissions, safer defaults and clearer diagnostics.")
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(28.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    tonalElevation = 4.dp
+                ) {
+                    Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Icon(Icons.Default.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(34.dp))
+                            Text("FLIPPERDROID", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
                         }
+                        Text("V4 · ACTIVE OWNER TOOLKIT", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        Text("Real BLE, Wi‑Fi/LAN, USB, NFC and hardware diagnostics for devices and networks you control.")
                     }
                 }
             }
 
-            item { SectionTitle("Radio & hardware") }
-            items(radioTools) { feature -> FeatureCard(feature) { navController.navigate(feature.route) } }
-
-            item { SectionTitle("Security tools") }
-            items(securityTools) { feature -> FeatureCard(feature) { navController.navigate(feature.route) } }
-
-            item { SectionTitle("Application") }
-            items(appItems) { feature -> FeatureCard(feature) { navController.navigate(feature.route) } }
+            item { SectionTitle("WIRELESS") }
+            items(wireless) { FeatureCard(it) { navController.navigate(it.route) } }
+            item { SectionTitle("HARDWARE") }
+            items(hardware) { FeatureCard(it) { navController.navigate(it.route) } }
+            item { SectionTitle("UTILITIES") }
+            items(utilities) { FeatureCard(it) { navController.navigate(it.route) } }
         }
     }
 }
 
 @Composable
 private fun SectionTitle(title: String) {
-    Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Black)
 }
 
 @Composable
@@ -142,28 +127,27 @@ private fun FeatureCard(feature: FeatureItem, onClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick,
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Icon(
-                imageVector = feature.icon,
-                contentDescription = null,
-                modifier = Modifier.size(36.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-            Column(modifier = Modifier.weight(1f)) {
+            Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.13f)) {
+                Icon(feature.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(10.dp).size(28.dp))
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(feature.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    if (feature.labOnly) {
-                        SuggestionChip(onClick = {}, label = { Text("LAB") })
+                    Text(feature.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) {
+                        Text(feature.badge, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     }
                 }
-                Text(feature.subtitle, style = MaterialTheme.typography.bodyMedium)
+                Text(feature.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
