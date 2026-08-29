@@ -23,56 +23,78 @@ class BleAdvertiserViewModel(app: Application) : AndroidViewModel(app) {
     private val _isAdvertising = MutableStateFlow(false)
     val isAdvertising: StateFlow<Boolean> = _isAdvertising
 
-    private val _status = MutableStateFlow("Ready")
+    private val _status = MutableStateFlow("BLE test beacon ready")
     val status: StateFlow<String> = _status
 
     private val _localName = MutableStateFlow("FlipperDroid-V4")
     val localName: StateFlow<String> = _localName
 
     private val serviceUuid = UUID.fromString("f1d00001-7a91-4c4e-9b6a-4f6c69707034")
+    private var previousAdapterName: String? = null
+    private var renamedAdapter = false
 
     private val callback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
             _isAdvertising.value = true
-            _status.value = "Advertising active · service $serviceUuid"
+            _status.value = "Beacon active · V4 service UUID visible"
         }
 
         override fun onStartFailure(errorCode: Int) {
             _isAdvertising.value = false
-            _status.value = "Advertising failed · code $errorCode"
+            _status.value = "Beacon failed · ${advertiseError(errorCode)}"
+            restoreAdapterName()
+        }
+    }
+
+    fun requiredPermissions(): Array<String> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        arrayOf(Manifest.permission.BLUETOOTH_ADVERTISE, Manifest.permission.BLUETOOTH_CONNECT)
+    } else {
+        emptyArray()
+    }
+
+    fun permissionsGranted(): Boolean {
+        val app = getApplication<Application>()
+        return requiredPermissions().all {
+            ContextCompat.checkSelfPermission(app, it) == PackageManager.PERMISSION_GRANTED
         }
     }
 
     fun updateName(value: String) {
-        _localName.value = value.take(20)
+        if (_isAdvertising.value) return
+        _localName.value = value.filter { !it.isISOControl() }.take(20).ifBlank { "FlipperDroid-V4" }
     }
 
-    fun canAdvertise(): Boolean = adapter?.isMultipleAdvertisementSupported == true && advertiser != null
+    fun canAdvertise(): Boolean = runCatching {
+        adapter?.isMultipleAdvertisementSupported == true && advertiser != null
+    }.getOrDefault(false)
 
     fun start() {
+        if (_isAdvertising.value) return
         val app = getApplication<Application>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            ContextCompat.checkSelfPermission(app, Manifest.permission.BLUETOOTH_ADVERTISE) != PackageManager.PERMISSION_GRANTED
-        ) {
-            _status.value = "Bluetooth advertise permission required"
+        if (!permissionsGranted()) {
+            _status.value = "Bluetooth advertise/connect permission required"
             return
         }
+
         val bt = adapter
-        if (bt == null || !bt.isEnabled) {
-            _status.value = "Bluetooth is disabled"
+        if (bt == null) {
+            _status.value = "Bluetooth LE is unavailable on this phone"
+            return
+        }
+        if (!runCatching { bt.isEnabled }.getOrDefault(false)) {
+            _status.value = "Turn Bluetooth on, then try again"
             return
         }
         val adv = advertiser
-        if (adv == null) {
+        if (adv == null || !canAdvertise()) {
             _status.value = "BLE advertising is not supported on this phone"
             return
         }
 
         runCatching {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-                ContextCompat.checkSelfPermission(app, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
-            ) {
-                bt.name = _localName.value
+            previousAdapterName = runCatching { bt.name }.getOrNull()
+            if (_localName.value.isNotBlank()) {
+                renamedAdapter = runCatching { bt.name = _localName.value }.getOrDefault(false)
             }
 
             val settings = AdvertiseSettings.Builder()
@@ -93,20 +115,39 @@ class BleAdvertiserViewModel(app: Application) : AndroidViewModel(app) {
                 .build()
 
             adv.startAdvertising(settings, data, scanResponse, callback)
-            _status.value = "Starting BLE advertisement…"
+            _status.value = "Starting BLE test beacon…"
         }.onFailure {
-            _status.value = "Advertising error: ${it.message}"
+            restoreAdapterName()
+            _status.value = "Beacon error: ${it.message ?: it.javaClass.simpleName}"
         }
     }
 
     fun stop() {
-        val app = getApplication<Application>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            ContextCompat.checkSelfPermission(app, Manifest.permission.BLUETOOTH_ADVERTISE) != PackageManager.PERMISSION_GRANTED
-        ) return
-        runCatching { advertiser?.stopAdvertising(callback) }
+        if (permissionsGranted()) {
+            runCatching { advertiser?.stopAdvertising(callback) }
+        }
         _isAdvertising.value = false
-        _status.value = "Advertising stopped"
+        restoreAdapterName()
+        _status.value = "BLE test beacon stopped"
+    }
+
+    private fun restoreAdapterName() {
+        if (!renamedAdapter || !permissionsGranted()) return
+        val original = previousAdapterName
+        if (!original.isNullOrBlank()) {
+            runCatching { adapter?.name = original }
+        }
+        previousAdapterName = null
+        renamedAdapter = false
+    }
+
+    private fun advertiseError(code: Int): String = when (code) {
+        AdvertiseCallback.ADVERTISE_FAILED_DATA_TOO_LARGE -> "advertisement data too large"
+        AdvertiseCallback.ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> "too many advertisers are active"
+        AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED -> "advertiser already started"
+        AdvertiseCallback.ADVERTISE_FAILED_INTERNAL_ERROR -> "Bluetooth stack internal error"
+        AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "advertising feature unsupported"
+        else -> "error code $code"
     }
 
     override fun onCleared() {
