@@ -53,14 +53,12 @@ fun NetworkToolsScreen(
     val results by viewModel.results.collectAsState()
     val isScanning by viewModel.isScanning.collectAsState()
 
-    LaunchedEffect(Unit) {
-        viewModel.initialize(context)
-    }
+    LaunchedEffect(Unit) { viewModel.initialize(context) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Network Diagnostics · V2") },
+                title = { Text("Network Toolkit · V4") },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -75,13 +73,10 @@ fun NetworkToolsScreen(
         }
     ) { paddingValues ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp)
+            modifier = Modifier.fillMaxSize().padding(paddingValues).padding(16.dp)
         ) {
             Text(
-                "Connectivity checks for networks and hosts you are authorized to test.",
+                "Targeted connectivity checks for devices and hosts you own or are authorized to assess.",
                 style = MaterialTheme.typography.bodyMedium
             )
             Spacer(Modifier.height(12.dp))
@@ -90,7 +85,7 @@ fun NetworkToolsScreen(
                 value = host,
                 onValueChange = { host = it.trim() },
                 label = { Text("Hostname or IP address") },
-                supportingText = { Text("Example: example.com or 192.168.1.1") },
+                supportingText = { Text("Example: router.local or 192.168.1.1") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
@@ -104,13 +99,12 @@ fun NetworkToolsScreen(
                 item {
                     DiagnosticCard(
                         title = "Ping",
-                        subtitle = "Check whether a host is reachable.",
+                        subtitle = "Check whether the selected host is reachable.",
                         icon = { Icon(Icons.Default.NetworkPing, contentDescription = null) },
                         enabled = host.isNotBlank(),
                         onClick = { viewModel.ping(host) }
                     )
                 }
-
                 item {
                     DiagnosticCard(
                         title = "DNS Lookup",
@@ -120,11 +114,10 @@ fun NetworkToolsScreen(
                         onClick = { viewModel.dnsLookup(host) }
                     )
                 }
-
                 item {
                     DiagnosticCard(
                         title = "Route Check",
-                        subtitle = "Run the app's basic reachability/path diagnostic.",
+                        subtitle = "Run the app's reachability/path diagnostic.",
                         icon = { Icon(Icons.Default.Timeline, contentDescription = null) },
                         enabled = host.isNotBlank(),
                         onClick = { viewModel.traceroute(host) }
@@ -139,17 +132,8 @@ fun NetworkToolsScreen(
                 }
 
                 items(results) { result ->
-                    val container = if (result.isError) {
-                        MaterialTheme.colorScheme.errorContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    }
-                    val content = if (result.isError) {
-                        MaterialTheme.colorScheme.onErrorContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-
+                    val container = if (result.isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant
+                    val content = if (result.isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant
                     ElevatedCard(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.elevatedCardColors(containerColor = container)
@@ -162,9 +146,7 @@ fun NetworkToolsScreen(
                 }
             }
 
-            if (isScanning) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            }
+            if (isScanning) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -177,11 +159,7 @@ private fun DiagnosticCard(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    ElevatedCard(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    ElevatedCard(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
         ListItem(
             headlineContent = { Text(title) },
             supportingContent = { Text(subtitle) },

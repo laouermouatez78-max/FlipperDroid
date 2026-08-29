@@ -2,8 +2,7 @@ package com.example.flipperdroid.viewmodel
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothManager
+import android.bluetooth.*
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
@@ -23,12 +22,24 @@ data class BleDeviceInfo(
     val serviceUuids: List<String>
 )
 
-/** V3 BLE discovery engine for passive nearby-device inventory. */
-class BluetoothViewModel : ViewModel() {
+data class GattCharacteristicInfo(
+    val uuid: String,
+    val properties: Int,
+    val readable: Boolean,
+    val writable: Boolean,
+    val notifiable: Boolean
+)
 
+data class GattServiceInfo(
+    val uuid: String,
+    val characteristics: List<GattCharacteristicInfo>
+)
+
+class BluetoothViewModel : ViewModel() {
     private var appContext: Context? = null
     private var adapter: BluetoothAdapter? = null
     private var scanning = false
+    private var activeGatt: BluetoothGatt? = null
 
     private val _devices = MutableStateFlow<List<BleDeviceInfo>>(emptyList())
     val devices: StateFlow<List<BleDeviceInfo>> = _devices
@@ -41,6 +52,12 @@ class BluetoothViewModel : ViewModel() {
 
     private val _status = MutableStateFlow("Bluetooth scanner not initialized")
     val status: StateFlow<String> = _status
+
+    private val _connectedAddress = MutableStateFlow<String?>(null)
+    val connectedAddress: StateFlow<String?> = _connectedAddress
+
+    private val _gattServices = MutableStateFlow<List<GattServiceInfo>>(emptyList())
+    val gattServices: StateFlow<List<GattServiceInfo>> = _gattServices
 
     fun requiredPermissions(): Array<String> = when {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> arrayOf(
@@ -77,8 +94,7 @@ class BluetoothViewModel : ViewModel() {
             _status.value = "Bluetooth permission required"
             return
         }
-        val bluetoothAdapter = adapter
-        if (bluetoothAdapter == null) {
+        val bluetoothAdapter = adapter ?: run {
             _status.value = "Bluetooth LE unavailable"
             return
         }
@@ -96,23 +112,55 @@ class BluetoothViewModel : ViewModel() {
         scanning = true
         _isScanning.value = true
         _status.value = "Scanning nearby BLE advertisements…"
-
-        val settings = ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-            .build()
-        scanner.startScan(null, settings, callback)
+        val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
+        scanner.startScan(null, settings, scanCallback)
     }
 
     @SuppressLint("MissingPermission")
     fun stopScan() {
         if (!scanning) return
-        runCatching { adapter?.bluetoothLeScanner?.stopScan(callback) }
+        runCatching { adapter?.bluetoothLeScanner?.stopScan(scanCallback) }
         scanning = false
         _isScanning.value = false
         _status.value = "Scan stopped · ${_devices.value.size} device(s)"
     }
 
-    private val callback = object : ScanCallback() {
+    @SuppressLint("MissingPermission")
+    fun connectGatt(address: String) {
+        refreshPermissionState()
+        if (!_permissionsGranted.value) {
+            _status.value = "Bluetooth connect permission required"
+            return
+        }
+        val context = appContext ?: return
+        val bt = adapter ?: return
+        stopScan()
+        disconnectGatt()
+        _status.value = "Connecting to $address…"
+        _gattServices.value = emptyList()
+        runCatching {
+            val device = bt.getRemoteDevice(address)
+            activeGatt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+            } else {
+                @Suppress("DEPRECATION")
+                device.connectGatt(context, false, gattCallback)
+            }
+        }.onFailure {
+            _status.value = "GATT connection error: ${it.message}"
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun disconnectGatt() {
+        runCatching { activeGatt?.disconnect() }
+        runCatching { activeGatt?.close() }
+        activeGatt = null
+        _connectedAddress.value = null
+        _gattServices.value = emptyList()
+    }
+
+    private val scanCallback = object : ScanCallback() {
         @SuppressLint("MissingPermission")
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val scanName = result.scanRecord?.deviceName
@@ -138,8 +186,53 @@ class BluetoothViewModel : ViewModel() {
         }
     }
 
+    private val gattCallback = object : BluetoothGattCallback() {
+        @SuppressLint("MissingPermission")
+        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+            when (newState) {
+                BluetoothProfile.STATE_CONNECTED -> {
+                    _connectedAddress.value = gatt.device.address
+                    _status.value = "Connected · discovering GATT services…"
+                    runCatching { gatt.discoverServices() }
+                }
+                BluetoothProfile.STATE_DISCONNECTED -> {
+                    _status.value = "GATT disconnected"
+                    _connectedAddress.value = null
+                    _gattServices.value = emptyList()
+                    runCatching { gatt.close() }
+                    if (activeGatt === gatt) activeGatt = null
+                }
+            }
+        }
+
+        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                _status.value = "Service discovery failed · status $status"
+                return
+            }
+            val list = gatt.services.map { service ->
+                GattServiceInfo(
+                    uuid = service.uuid.toString(),
+                    characteristics = service.characteristics.map { characteristic ->
+                        val p = characteristic.properties
+                        GattCharacteristicInfo(
+                            uuid = characteristic.uuid.toString(),
+                            properties = p,
+                            readable = p and BluetoothGattCharacteristic.PROPERTY_READ != 0,
+                            writable = p and (BluetoothGattCharacteristic.PROPERTY_WRITE or BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0,
+                            notifiable = p and (BluetoothGattCharacteristic.PROPERTY_NOTIFY or BluetoothGattCharacteristic.PROPERTY_INDICATE) != 0
+                        )
+                    }
+                )
+            }
+            _gattServices.value = list
+            _status.value = "GATT ready · ${list.size} service(s)"
+        }
+    }
+
     override fun onCleared() {
         stopScan()
+        disconnectGatt()
         super.onCleared()
     }
 }
