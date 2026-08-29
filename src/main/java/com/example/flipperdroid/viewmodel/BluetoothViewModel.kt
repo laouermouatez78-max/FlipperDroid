@@ -18,13 +18,38 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
+/** Parsed manufacturer-specific field from a BLE advertisement. */
+data class BleManufacturerPayload(
+    val companyId: Int,
+    val dataHex: String
+)
+
+/** Parsed service-data field from a BLE advertisement. */
+data class BleServicePayload(
+    val uuid: String,
+    val dataHex: String
+)
+
+enum class BleTrafficLevel {
+    NORMAL,
+    ELEVATED
+}
 
 data class BleDeviceInfo(
     val name: String,
     val address: String,
     val rssi: Int,
     val connectable: Boolean?,
-    val serviceUuids: List<String>
+    val serviceUuids: List<String>,
+    val txPower: Int?,
+    val manufacturerData: List<BleManufacturerPayload>,
+    val serviceData: List<BleServicePayload>,
+    val rawAdvertisementHex: String,
+    val seenCount: Int,
+    val firstSeenMs: Long,
+    val lastSeenMs: Long,
+    val advertisementsPerSecond: Double,
+    val trafficLevel: BleTrafficLevel
 )
 
 data class GattCharacteristicInfo(
@@ -40,6 +65,13 @@ data class GattServiceInfo(
     val characteristics: List<GattCharacteristicInfo>
 )
 
+/**
+ * BLE Explorer for authorized/owned-device analysis.
+ *
+ * The scanner decodes passive advertisement metadata, exposes raw packet bytes and
+ * provides a simple observation-rate indicator. The indicator is intentionally
+ * descriptive only: a high advertising rate is not proof of malicious activity.
+ */
 class BluetoothViewModel : ViewModel() {
     private var appContext: Context? = null
     private var adapter: BluetoothAdapter? = null
@@ -121,10 +153,11 @@ class BluetoothViewModel : ViewModel() {
         _devices.value = emptyList()
         scanning = true
         _isScanning.value = true
-        _status.value = "Scanning nearby BLE advertisements…"
+        _status.value = "Scanning and decoding nearby BLE advertisements…"
 
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .setReportDelay(0)
             .build()
 
         runCatching { scanner.startScan(null, settings, scanCallback) }
@@ -140,7 +173,11 @@ class BluetoothViewModel : ViewModel() {
             delay(12_000)
             if (scanning) {
                 stopScan(updateStatus = false)
-                _status.value = "Scan complete · ${_devices.value.size} device(s) found"
+                val elevated = _devices.value.count { it.trafficLevel == BleTrafficLevel.ELEVATED }
+                _status.value = buildString {
+                    append("Scan complete · ${_devices.value.size} device(s) found")
+                    if (elevated > 0) append(" · $elevated elevated-rate observation(s)")
+                }
             }
         }
     }
@@ -215,20 +252,68 @@ class BluetoothViewModel : ViewModel() {
     private val scanCallback = object : ScanCallback() {
         @SuppressLint("MissingPermission")
         override fun onScanResult(callbackType: Int, result: ScanResult) {
-            val scanName = result.scanRecord?.deviceName
+            val record = result.scanRecord
+            val scanName = record?.deviceName
             val deviceName = runCatching { result.device.name }.getOrNull()
+            val now = System.currentTimeMillis()
+            val previous = _devices.value.firstOrNull { it.address == result.device.address }
+            val firstSeen = previous?.firstSeenMs ?: now
+            val seenCount = (previous?.seenCount ?: 0) + 1
+            val elapsedMs = (now - firstSeen).coerceAtLeast(1L)
+            val rate = if (seenCount <= 1) 0.0 else (seenCount - 1) * 1000.0 / elapsedMs.toDouble()
+            val trafficLevel = if (seenCount >= 12 && rate >= 8.0) {
+                BleTrafficLevel.ELEVATED
+            } else {
+                BleTrafficLevel.NORMAL
+            }
+
+            val manufacturerData = record?.manufacturerSpecificData?.let { sparse ->
+                buildList {
+                    for (index in 0 until sparse.size()) {
+                        add(
+                            BleManufacturerPayload(
+                                companyId = sparse.keyAt(index),
+                                dataHex = sparse.valueAt(index).toHex()
+                            )
+                        )
+                    }
+                }
+            }.orEmpty()
+
+            val serviceData = record?.serviceData.orEmpty().map { (uuid, payload) ->
+                BleServicePayload(
+                    uuid = uuid.uuid.toString(),
+                    dataHex = payload.toHex()
+                )
+            }
+
             val info = BleDeviceInfo(
                 name = scanName ?: deviceName ?: "Unnamed BLE device",
                 address = result.device.address,
                 rssi = result.rssi,
                 connectable = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) result.isConnectable else null,
-                serviceUuids = result.scanRecord?.serviceUuids.orEmpty().map { it.uuid.toString() }
+                serviceUuids = record?.serviceUuids.orEmpty().map { it.uuid.toString() },
+                txPower = record?.txPowerLevel?.takeUnless { it == Int.MIN_VALUE },
+                manufacturerData = manufacturerData,
+                serviceData = serviceData,
+                rawAdvertisementHex = record?.bytes.toHex(),
+                seenCount = seenCount,
+                firstSeenMs = firstSeen,
+                lastSeenMs = now,
+                advertisementsPerSecond = rate,
+                trafficLevel = trafficLevel
             )
+
             val updated = _devices.value.toMutableList()
             val index = updated.indexOfFirst { it.address == info.address }
             if (index >= 0) updated[index] = info else updated += info
             _devices.value = updated.sortedByDescending { it.rssi }
-            _status.value = "Scanning · ${updated.size} device(s)"
+
+            val elevated = updated.count { it.trafficLevel == BleTrafficLevel.ELEVATED }
+            _status.value = buildString {
+                append("Scanning · ${updated.size} device(s)")
+                if (elevated > 0) append(" · $elevated elevated-rate")
+            }
         }
 
         override fun onScanFailed(errorCode: Int) {
@@ -308,3 +393,7 @@ class BluetoothViewModel : ViewModel() {
         super.onCleared()
     }
 }
+
+private fun ByteArray?.toHex(): String = this
+    ?.joinToString(separator = " ") { byte -> "%02X".format(byte.toInt() and 0xFF) }
+    .orEmpty()
