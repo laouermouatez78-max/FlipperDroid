@@ -119,7 +119,7 @@ class MainActivity : ComponentActivity() {
             composable("lan_analyzer") { LanAnalyzerScreen(navController, lanAnalyzerViewModel) }
             composable("network") { NetworkToolsScreen(navController, networkToolsViewModel) }
             composable("usb_inspector") { UsbInspectorScreen(navController, usbInspectorViewModel) }
-            composable("usb_hid_lab") { BadUsbScreen(navController, badUsbViewModel) }
+            composable("usb_hid_lab") { BadUsbScreen(navController, badUsbViewModel, usbInspectorViewModel) }
             composable("ir") { InfraredScreen(navController) }
             composable("password_generator") { PasswordGeneratorScreen(navController) }
             composable("qr_scanner") { QrScannerScreen(navController) }
