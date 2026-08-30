@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -78,7 +79,7 @@ fun BluetoothScannerScreen(navController: NavController, viewModel: BluetoothVie
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) {
-                        Icon(Icons.Default.BluetoothSearching, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(10.dp).size(28.dp))
+                        Icon(Icons.AutoMirrored.Filled.BluetoothSearching, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(10.dp).size(28.dp))
                     }
                     Column(Modifier.weight(1f)) {
                         Text("Advertisement decoder + GATT explorer", fontWeight = FontWeight.Bold)
@@ -173,7 +174,7 @@ fun BluetoothScannerScreen(navController: NavController, viewModel: BluetoothVie
             if (devices.isEmpty()) {
                 Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Icon(if (isScanning) Icons.Default.BluetoothSearching else Icons.Default.BluetoothDisabled, contentDescription = null, modifier = Modifier.size(52.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(if (isScanning) Icons.AutoMirrored.Filled.BluetoothSearching else Icons.Default.BluetoothDisabled, contentDescription = null, modifier = Modifier.size(52.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(if (isScanning) "Scanning for BLE devices…" else "No BLE devices listed yet", textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
                         Text("Scans stop automatically after about 12 seconds.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (permissionsGranted && !isScanning && !isConnecting) Button(onClick = viewModel::startScan) { Text("Start scan") }
