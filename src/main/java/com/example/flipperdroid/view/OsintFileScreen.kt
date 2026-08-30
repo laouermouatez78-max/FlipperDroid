@@ -4,6 +4,9 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -114,6 +117,7 @@ fun OsintFileScreen(navController: NavController) {
             }
 
             report?.let { item ->
+                val scroll = rememberScrollState()
                 ElevatedCard(
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     colors = CardDefaults.elevatedCardColors(
@@ -132,14 +136,12 @@ fun OsintFileScreen(navController: NavController) {
                         SelectionContainer(
                             modifier = Modifier.fillMaxWidth().weight(1f)
                         ) {
-                            androidx.compose.foundation.rememberScrollState().let { scroll ->
-                                Text(
-                                    item.text,
-                                    modifier = Modifier.fillMaxSize().verticalScroll(scroll),
-                                    fontFamily = FontFamily.Monospace,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
+                            Text(
+                                item.text,
+                                modifier = Modifier.fillMaxSize().verticalScroll(scroll),
+                                fontFamily = FontFamily.Monospace,
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
                     }
                 }
