@@ -35,6 +35,9 @@ fun BleSpamScreen(
     val realActive by viewModel.realBeaconActive.collectAsState()
     val realPayload by viewModel.realPayloadText.collectAsState()
     val realStatus by viewModel.realStatus.collectAsState()
+    val realTxProfile by viewModel.realTxProfile.collectAsState()
+    val burstDurationSeconds by viewModel.burstDurationSeconds.collectAsState()
+    val elapsedSeconds by viewModel.elapsedSeconds.collectAsState()
     var permissionRefresh by remember { mutableIntStateOf(0) }
     val hasPermissions = remember(permissionRefresh) { viewModel.permissionsGranted() }
 
@@ -64,7 +67,7 @@ fun BleSpamScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("BLE Lab · V4") },
+                title = { Text("BLE Red Team Lab · V4") },
                 navigationIcon = {
                     if (navController != null) {
                         IconButton(onClick = { navController.navigateUp() }) {
@@ -99,9 +102,9 @@ fun BleSpamScreen(
                             )
                         }
                         Column(Modifier.weight(1f)) {
-                            Text("Real BLE device-to-device test", fontWeight = FontWeight.Bold)
+                            Text("Bounded real-radio resilience test", fontWeight = FontWeight.Bold)
                             Text(
-                                "Broadcasts a dedicated FlipperDroid test payload at a normal Android BLE advertising rate. Detect it with a second device you control.",
+                                "Runs an identifiable FlipperDroid BLE beacon with a platform-managed normal or short stress profile. Every test stops automatically.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -112,18 +115,61 @@ fun BleSpamScreen(
 
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("REAL RADIO TEST", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+
                         OutlinedTextField(
                             value = realPayload,
                             onValueChange = viewModel::updateRealPayload,
                             enabled = !realActive,
                             singleLine = true,
                             label = { Text("Test payload") },
-                            supportingText = { Text("Up to 12 characters · FlipperDroid manufacturer payload") },
+                            supportingText = { Text("Up to 12 characters · manufacturer ID 0xFFFF · FD4 marker") },
                             modifier = Modifier.fillMaxWidth()
                         )
-                        Text(realStatus, style = MaterialTheme.typography.bodySmall)
+
+                        Text("RF profile", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = realTxProfile == BleSpamViewModel.RealTxProfile.NORMAL,
+                                onClick = { viewModel.setRealTxProfile(BleSpamViewModel.RealTxProfile.NORMAL) },
+                                enabled = !realActive,
+                                label = { Text("Normal") }
+                            )
+                            FilterChip(
+                                selected = realTxProfile == BleSpamViewModel.RealTxProfile.SHORT_STRESS,
+                                onClick = { viewModel.setRealTxProfile(BleSpamViewModel.RealTxProfile.SHORT_STRESS) },
+                                enabled = !realActive,
+                                label = { Text("Short stress") }
+                            )
+                        }
+
+                        Text("Automatic stop", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf(5, 10, 20).forEach { seconds ->
+                                FilterChip(
+                                    selected = burstDurationSeconds == seconds,
+                                    onClick = { viewModel.setBurstDurationSeconds(seconds) },
+                                    enabled = !realActive,
+                                    label = { Text("${seconds}s") }
+                                )
+                            }
+                        }
+
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text(realStatus, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                                Text(
+                                    "Profile: ${if (realTxProfile == BleSpamViewModel.RealTxProfile.NORMAL) "balanced" else "low-latency burst"} · elapsed ${elapsedSeconds}s / ${burstDurationSeconds}s",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
 
                         if (!hasPermissions && viewModel.requiredPermissions().isNotEmpty()) {
                             OutlinedButton(
@@ -146,7 +192,7 @@ fun BleSpamScreen(
                         ) {
                             Icon(if (realActive) Icons.Default.Stop else Icons.Default.PlayArrow, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
-                            Text(if (realActive) "Stop real beacon" else "Start real BLE beacon")
+                            Text(if (realActive) "Emergency stop" else "Start bounded RF test")
                         }
                     }
                 }
@@ -157,7 +203,7 @@ fun BleSpamScreen(
                 Spacer(Modifier.height(4.dp))
                 Text("LEGACY PROFILE PREVIEW", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
                 Text(
-                    "Apple/Samsung legacy payloads stay local preview only. They are useful for studying the format without impersonating accessories around you.",
+                    "Apple/Samsung legacy payloads stay local preview only. Use the catalogue to inspect and compare their structures without transmitting them as vendor accessories.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
