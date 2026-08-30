@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Build
@@ -32,7 +33,7 @@ data class UsbDeviceInfo(
 
 class UsbInspectorViewModel(app: Application) : AndroidViewModel(app) {
     private val manager = app.getSystemService(Context.USB_SERVICE) as UsbManager
-    private val actionUsbPermission = "${app.packageName}.USB_PERMISSION_V4"
+    private val actionUsbPermission = "${app.packageName}.USB_PERMISSION_V5"
     private var receiverRegistered = false
 
     private val _usbHostSupported = MutableStateFlow(app.packageManager.hasSystemFeature(PackageManager.FEATURE_USB_HOST))
@@ -78,19 +79,17 @@ class UsbInspectorViewModel(app: Application) : AndroidViewModel(app) {
 
         val list = runCatching {
             manager.deviceList.values.map { device -> device.toInfo(manager.hasPermission(device)) }
-                .sortedBy { it.deviceId }
+                .sortedWith(compareBy<UsbDeviceInfo> { it.vendorId }.thenBy { it.productId }.thenBy { it.deviceId })
         }.getOrElse {
-            _status.value = "USB refresh error: ${it.message?.take(160) ?: it.javaClass.simpleName}"
+            _status.value = "USB refresh error: ${safeMessage(it)}"
             emptyList()
         }
 
         _devices.value = list
-        if (list.isEmpty()) {
-            _status.value = "No USB device detected. Connect a peripheral through USB OTG, then refresh."
-        } else if (list.none { it.permissionGranted }) {
-            _status.value = "${list.size} USB device(s) detected · tap Grant access to inspect protected details"
-        } else {
-            _status.value = "${list.size} USB device(s) detected"
+        _status.value = when {
+            list.isEmpty() -> "No USB device detected. Connect a peripheral through USB OTG, then refresh."
+            list.none { it.permissionGranted } -> "${list.size} USB device(s) detected · grant access to inspect protected strings and test opening"
+            else -> "${list.size} USB device(s) detected · ${list.count { it.permissionGranted }} accessible"
         }
     }
 
@@ -113,14 +112,10 @@ class UsbInspectorViewModel(app: Application) : AndroidViewModel(app) {
         val pendingIntent = PendingIntent.getBroadcast(app, deviceId, intent, flags)
         runCatching { manager.requestPermission(device, pendingIntent) }
             .onSuccess { _status.value = "Waiting for Android USB permission…" }
-            .onFailure { _status.value = "Could not request USB permission: ${it.message?.take(160) ?: it.javaClass.simpleName}" }
+            .onFailure { _status.value = "Could not request USB permission: ${safeMessage(it)}" }
     }
 
-    /**
-     * Performs a real, non-destructive USB Host test: Android opens the selected USB
-     * device and immediately closes the file descriptor. No interface is claimed and
-     * no endpoint data is sent.
-     */
+    /** Real non-destructive USB Host test: open the device and immediately close it. */
     fun testOpenConnection(deviceId: Int) {
         val device = manager.deviceList.values.firstOrNull { it.deviceId == deviceId } ?: run {
             _status.value = "USB device is no longer connected"
@@ -132,6 +127,7 @@ class UsbInspectorViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
 
+        val started = System.currentTimeMillis()
         val connection = runCatching { manager.openDevice(device) }.getOrNull()
         if (connection == null) {
             _status.value = "Android could not open the USB device"
@@ -139,7 +135,8 @@ class UsbInspectorViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         try {
-            _status.value = "REAL USB TEST PASSED · opened %04X:%04X · ${device.interfaceCount} interface(s)".format(device.vendorId, device.productId)
+            val elapsed = System.currentTimeMillis() - started
+            _status.value = "USB OPEN/CLOSE TEST PASSED · %04X:%04X · ${device.interfaceCount} interface(s) · ${elapsed} ms".format(device.vendorId, device.productId)
         } finally {
             runCatching { connection.close() }
         }
@@ -194,4 +191,48 @@ class UsbInspectorViewModel(app: Application) : AndroidViewModel(app) {
         }
         super.onCleared()
     }
+
+    companion object {
+        fun classLabel(value: Int): String = when (value) {
+            UsbConstants.USB_CLASS_AUDIO -> "Audio"
+            UsbConstants.USB_CLASS_COMM -> "Communications"
+            UsbConstants.USB_CLASS_HID -> "HID"
+            UsbConstants.USB_CLASS_PHYSICA -> "Physical"
+            UsbConstants.USB_CLASS_STILL_IMAGE -> "Imaging"
+            UsbConstants.USB_CLASS_PRINTER -> "Printer"
+            UsbConstants.USB_CLASS_MASS_STORAGE -> "Mass storage"
+            UsbConstants.USB_CLASS_HUB -> "Hub"
+            UsbConstants.USB_CLASS_CDC_DATA -> "CDC data"
+            UsbConstants.USB_CLASS_CSCID -> "Smart card"
+            UsbConstants.USB_CLASS_CONTENT_SEC -> "Content security"
+            UsbConstants.USB_CLASS_VIDEO -> "Video"
+            UsbConstants.USB_CLASS_WIRELESS_CONTROLLER -> "Wireless controller"
+            UsbConstants.USB_CLASS_MISC -> "Miscellaneous"
+            UsbConstants.USB_CLASS_APP_SPEC -> "Application specific"
+            UsbConstants.USB_CLASS_VENDOR_SPEC -> "Vendor specific"
+            UsbConstants.USB_CLASS_PER_INTERFACE -> "Per-interface"
+            else -> "Class $value"
+        }
+
+        fun endpointDirectionLabel(direction: Int): String = when (direction) {
+            UsbConstants.USB_DIR_IN -> "IN"
+            UsbConstants.USB_DIR_OUT -> "OUT"
+            else -> "?"
+        }
+
+        fun endpointTypeLabel(type: Int): String = when (type) {
+            UsbConstants.USB_ENDPOINT_XFER_CONTROL -> "control"
+            UsbConstants.USB_ENDPOINT_XFER_ISOC -> "isochronous"
+            UsbConstants.USB_ENDPOINT_XFER_BULK -> "bulk"
+            UsbConstants.USB_ENDPOINT_XFER_INT -> "interrupt"
+            else -> "type $type"
+        }
+
+        fun maskSerial(serial: String?): String? {
+            val clean = serial?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            return if (clean.length <= 4) "••••" else "••••••${clean.takeLast(4)}"
+        }
+    }
+
+    private fun safeMessage(error: Throwable): String = error.message?.take(160) ?: error.javaClass.simpleName
 }
