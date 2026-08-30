@@ -32,8 +32,12 @@ fun InfraredScreen(navController: NavController) {
 
     fun transmit(pattern: IntArray) {
         val frequency = frequencyText.toIntOrNull()
-        if (!hasIr || irManager == null) {
+        if (!hasIr) {
             status = "This phone has no Consumer IR emitter"
+            return
+        }
+        val manager = irManager ?: run {
+            status = "Consumer IR service became unavailable"
             return
         }
         if (frequency == null || frequency !in 20_000..60_000) {
@@ -48,7 +52,7 @@ fun InfraredScreen(navController: NavController) {
             status = "Invalid IR pattern (1-4096 timings, each <=200 ms, total <=1.5 s)"
             return
         }
-        runCatching { irManager.transmit(frequency, pattern) }
+        runCatching { manager.transmit(frequency, pattern) }
             .onSuccess { status = "IR transmitted · ${pattern.size} timings · ${pattern.sum()} µs @ $frequency Hz" }
             .onFailure { status = "IR transmit failed: ${it.message?.take(120) ?: it.javaClass.simpleName}" }
     }
