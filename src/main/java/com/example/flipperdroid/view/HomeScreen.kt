@@ -36,32 +36,42 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("legal_prefs", Context.MODE_PRIVATE) }
-    var legalAccepted by remember { mutableStateOf(prefs.getBoolean("legalAcceptedV4", false)) }
+    var legalAccepted by remember { mutableStateOf(prefs.getBoolean("legalAcceptedV5", false)) }
     var query by remember { mutableStateOf("") }
 
     if (!legalAccepted) {
         AlertDialog(
             onDismissRequest = {},
             icon = { Icon(Icons.Default.Security, contentDescription = null) },
-            title = { Text("FlipperDroid V4 · Owner Toolkit") },
+            title = { Text("FlipperDroid V5 · Security & OSINT Toolkit") },
             text = {
-                Text("Use hardware and network tools only on devices, tags and networks you own or are explicitly authorized to test. Hardware-backed labs use dedicated FlipperDroid test protocols and avoid disruptive flooding, credential capture and automatic command injection.")
+                Text("Use hardware and network tools only on devices, tags and networks you own or are explicitly authorized to test. OSINT tools are intended for public information and local analysis only. Avoid collecting private account data, credentials or unrelated personal information.")
             },
             confirmButton = {
                 Button(onClick = {
-                    prefs.edit { putBoolean("legalAcceptedV4", true) }
+                    prefs.edit { putBoolean("legalAcceptedV5", true) }
                     legalAccepted = true
-                }) { Text("Enter V4") }
+                }) { Text("Enter V5") }
             }
         )
     }
 
     val wireless = listOf(
         FeatureItem("BLE Explorer", "Discover nearby BLE advertisements and inspect GATT on devices you control.", Icons.Default.BluetoothSearching, "bluetooth_scan", "REAL"),
-        FeatureItem("BLE Test Beacon", "Broadcast one normal V4 beacon to test a second device.", Icons.Default.BluetoothAudio, "ble_advertiser", "REAL"),
+        FeatureItem("BLE Test Beacon", "Broadcast one normal V5 beacon to test a second device.", Icons.Default.BluetoothAudio, "ble_advertiser", "REAL"),
         FeatureItem("Wi‑Fi Analyzer", "Inspect SSID, BSSID, channel, signal and security posture.", Icons.Default.Wifi, "wifi_deauther", "REAL"),
         FeatureItem("LAN Analyzer", "Discover responsive hosts on your connected private network.", Icons.Default.Lan, "lan_analyzer", "REAL"),
         FeatureItem("Network Toolkit", "DNS, ping, routes and targeted connectivity checks.", Icons.Default.Router, "network", "REAL")
+    )
+
+    val osint = listOf(
+        FeatureItem(
+            "OSINT Hub",
+            "Inspect public domain, IP and URL structure with local analysis tools.",
+            Icons.Default.Public,
+            "osint",
+            "PUBLIC"
+        )
     )
 
     val hardware = listOf(
@@ -82,7 +92,7 @@ fun HomeScreen(
         FeatureItem("Password Generator", "Generate strong passwords on-device.", Icons.Default.Key, "password_generator", "LOCAL"),
         FeatureItem("Device Status", "Check NFC, BLE, Wi‑Fi, USB, IR and Android support.", Icons.Default.PhoneAndroid, "device_status", "CHECK"),
         FeatureItem("Settings", "Theme and application preferences.", Icons.Default.Settings, "settings", "APP"),
-        FeatureItem("About V4", "Version, modules, limitations and compatibility notes.", Icons.Default.Info, "about", "INFO")
+        FeatureItem("About V5", "Version, modules, limitations and compatibility notes.", Icons.Default.Info, "about", "INFO")
     )
 
     fun filtered(items: List<FeatureItem>): List<FeatureItem> {
@@ -95,7 +105,7 @@ fun HomeScreen(
         }
     }
 
-    val visibleCount = (wireless + hardware + labs + utilities).count {
+    val visibleCount = (wireless + osint + hardware + labs + utilities).count {
         val q = query.trim()
         q.isBlank() || it.title.contains(q, true) || it.subtitle.contains(q, true) || it.badge.contains(q, true)
     }
@@ -142,19 +152,19 @@ fun HomeScreen(
                             }
                             Column(Modifier.weight(1f)) {
                                 Text("FLIPPERDROID", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
-                                Text("V4.0 · OWNER TOOLKIT", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold)
+                                Text("V5.0 · SECURITY + OSINT", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold)
                             }
-                            AssistChip(onClick = {}, label = { Text("V4") })
+                            AssistChip(onClick = {}, label = { Text("V5") })
                         }
                         Text(
-                            "Hardware diagnostics, wireless inspection and real device-to-device test labs in one Android toolkit.",
+                            "Hardware diagnostics, wireless inspection, public-information analysis and device-to-device security labs in one Android toolkit.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             StatusMini("REAL", Icons.Default.Bolt)
                             StatusMini("LAB", Icons.Default.Science)
-                            StatusMini("LOCAL", Icons.Default.PhoneAndroid)
+                            StatusMini("OSINT", Icons.Default.Public)
                         }
                     }
                 }
@@ -174,7 +184,7 @@ fun HomeScreen(
                             }
                         }
                     },
-                    placeholder = { Text("Search tools and labs") },
+                    placeholder = { Text("Search security, OSINT and lab tools") },
                     supportingText = { Text("$visibleCount module(s) available") }
                 )
             }
@@ -183,6 +193,12 @@ fun HomeScreen(
             if (wirelessVisible.isNotEmpty()) {
                 item { SectionTitle("WIRELESS", Icons.Default.Wifi) }
                 items(wirelessVisible, key = { it.route }) { FeatureCard(it) { navController.navigate(it.route) } }
+            }
+
+            val osintVisible = filtered(osint)
+            if (osintVisible.isNotEmpty()) {
+                item { SectionTitle("OSINT", Icons.Default.Public) }
+                items(osintVisible, key = { it.route }) { FeatureCard(it) { navController.navigate(it.route) } }
             }
 
             val hardwareVisible = filtered(hardware)
