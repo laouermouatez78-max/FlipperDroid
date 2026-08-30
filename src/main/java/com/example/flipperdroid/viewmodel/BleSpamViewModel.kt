@@ -22,10 +22,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /**
- * V4 BLE Red Team Lab controller.
+ * V5 BLE Radio Lab controller.
  *
  * Real-radio tests are intentionally bounded to one identifiable FlipperDroid advertiser.
- * Vendor impersonation, crash payloads and continuous flooding remain preview-only.
+ * Vendor impersonation, crash-oriented payloads and continuous flooding remain preview-only.
  */
 class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -44,7 +44,7 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
             txPower = AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM
         ),
         SHORT_BURST_10S(
-            label = "Short burst · 10 s",
+            label = "Short test · 10 s",
             durationSeconds = 10,
             advertiseMode = AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY,
             txPower = AdvertiseSettings.ADVERTISE_TX_POWER_LOW
@@ -70,7 +70,7 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
     private val _realBeaconActive = MutableStateFlow(false)
     val realBeaconActive: StateFlow<Boolean> = _realBeaconActive
 
-    private val _realPayloadText = MutableStateFlow("HELLO-V4")
+    private val _realPayloadText = MutableStateFlow("HELLO-V5")
     val realPayloadText: StateFlow<String> = _realPayloadText
 
     private val _realStatus = MutableStateFlow("Real BLE resilience test ready")
@@ -88,10 +88,14 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
     private val _lastSessionSummary = MutableStateFlow("No real-radio session yet")
     val lastSessionSummary: StateFlow<String> = _lastSessionSummary
 
+    private val _cooldownSeconds = MutableStateFlow(0)
+    val cooldownSeconds: StateFlow<Int> = _cooldownSeconds
+
     private var allAdvertisementSets: List<AdvertisementSet> = emptyList()
     private var selectedSets: List<AdvertisementSet> = emptyList()
     private var simulationJob: Job? = null
     private var realSessionJob: Job? = null
+    private var cooldownJob: Job? = null
     private var realSessionStartMs: Long = 0L
 
     private val realAdvertiseCallback = object : AdvertiseCallback() {
@@ -101,8 +105,8 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
             _realSessionCount.value += 1
             realSessionStartMs = System.currentTimeMillis()
             _remainingSeconds.value = profile.durationSeconds
-            _realStatus.value = "On-air · ${profile.label} · auto-stop enabled"
-            appendLog("REAL TX started · ${profile.label} · FlipperDroid LAB payload")
+            _realStatus.value = "On-air · ${profile.label} · identifiable FD5LAB · auto-stop enabled"
+            appendLog("REAL TX started · ${profile.label} · FD5LAB payload")
             startAutoStopTimer(profile.durationSeconds)
         }
 
@@ -119,14 +123,12 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         loadAdvertisementSets()
-        appendLog("V4 BLE Red Team Lab ready")
+        appendLog("V5 BLE Radio Lab ready")
     }
 
     fun requiredPermissions(): Array<String> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         arrayOf(Manifest.permission.BLUETOOTH_ADVERTISE, Manifest.permission.BLUETOOTH_CONNECT)
-    } else {
-        emptyArray()
-    }
+    } else emptyArray()
 
     fun permissionsGranted(): Boolean {
         val app = getApplication<Application>()
@@ -140,13 +142,12 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
     }.getOrDefault(false)
 
     fun updateRealPayload(value: String) {
-        if (_realBeaconActive.value) return
-        val cleaned = value.filter { !it.isISOControl() }.take(8)
-        _realPayloadText.value = cleaned
+        if (_realBeaconActive.value || _cooldownSeconds.value > 0) return
+        _realPayloadText.value = value.filter { !it.isISOControl() }.take(8)
     }
 
     fun setRealProfile(profile: RealTestProfile) {
-        if (_realBeaconActive.value) return
+        if (_realBeaconActive.value || _cooldownSeconds.value > 0) return
         _realProfile.value = profile
         _realStatus.value = "Ready · ${profile.label}"
         appendLog("Real-radio profile set to ${profile.label}")
@@ -154,6 +155,10 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
 
     fun startRealBeacon() {
         if (_realBeaconActive.value) return
+        if (_cooldownSeconds.value > 0) {
+            _realStatus.value = "Cooldown active · ${_cooldownSeconds.value}s before another real-radio test"
+            return
+        }
         if (!permissionsGranted()) {
             _realStatus.value = "Grant Bluetooth advertise/connect permission"
             return
@@ -174,10 +179,10 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         val profile = _realProfile.value
-        val text = _realPayloadText.value.ifBlank { "HELLO-V4" }
-        // Fixed FD4LAB prefix + reserved test manufacturer ID makes the packet identifiable
-        // and prevents this path from becoming a vendor-profile impersonator.
-        val payload = byteArrayOf(0x46, 0x44, 0x34, 0x4C, 0x41, 0x42) +
+        val text = _realPayloadText.value.ifBlank { "HELLO-V5" }
+        // Fixed FD5LAB prefix + reserved test manufacturer ID make the packet identifiable
+        // and keep this path separate from vendor-profile preview data.
+        val payload = byteArrayOf(0x46, 0x44, 0x35, 0x4C, 0x41, 0x42) +
             text.toByteArray(Charsets.UTF_8).take(8).toByteArray()
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(profile.advertiseMode)
@@ -189,9 +194,7 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
             .setIncludeDeviceName(false)
             .addManufacturerData(0xFFFF, payload)
             .build()
-        val scanResponse = AdvertiseData.Builder()
-            .setIncludeDeviceName(true)
-            .build()
+        val scanResponse = AdvertiseData.Builder().setIncludeDeviceName(true).build()
 
         runCatching {
             realSessionJob?.cancel()
@@ -200,13 +203,13 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
             _realStatus.value = "Starting · ${profile.label}…"
         }.onFailure {
             _remainingSeconds.value = 0
-            _realStatus.value = "BLE start error: ${it.message ?: it.javaClass.simpleName}"
+            _realStatus.value = "BLE start error: ${it.message?.take(120) ?: it.javaClass.simpleName}"
             appendLog("REAL TX exception · ${it.javaClass.simpleName}")
         }
     }
 
     fun stopRealBeacon() {
-        stopRealBeaconInternal("manual stop")
+        stopRealBeaconInternal("manual stop", startCooldown = true)
     }
 
     private fun startAutoStopTimer(durationSeconds: Int) {
@@ -217,23 +220,17 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
                 delay(1000)
             }
             _remainingSeconds.value = 0
-            stopRealBeaconInternal("automatic timeout")
+            stopRealBeaconInternal("automatic timeout", startCooldown = true)
         }
     }
 
-    private fun stopRealBeaconInternal(reason: String) {
+    private fun stopRealBeaconInternal(reason: String, startCooldown: Boolean) {
         realSessionJob?.cancel()
         realSessionJob = null
-        if (permissionsGranted()) {
-            runCatching { advertiser?.stopAdvertising(realAdvertiseCallback) }
-        }
+        if (permissionsGranted()) runCatching { advertiser?.stopAdvertising(realAdvertiseCallback) }
 
         val wasActive = _realBeaconActive.value || realSessionStartMs > 0L
-        val elapsedMs = if (realSessionStartMs > 0L) {
-            (System.currentTimeMillis() - realSessionStartMs).coerceAtLeast(0L)
-        } else {
-            0L
-        }
+        val elapsedMs = if (realSessionStartMs > 0L) (System.currentTimeMillis() - realSessionStartMs).coerceAtLeast(0L) else 0L
         val elapsedSeconds = elapsedMs / 1000.0
 
         _remainingSeconds.value = 0
@@ -242,9 +239,22 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
             val summary = "${_realProfile.value.label} · %.1f s · $reason".format(elapsedSeconds)
             _lastSessionSummary.value = summary
             appendLog("REAL TX stopped · $summary")
+            if (startCooldown) startCooldown(15)
         }
         realSessionStartMs = 0L
-        _realStatus.value = "Real BLE resilience test stopped"
+        _realStatus.value = if (_cooldownSeconds.value > 0) "Real BLE test stopped · cooldown active" else "Real BLE resilience test stopped"
+    }
+
+    private fun startCooldown(seconds: Int) {
+        cooldownJob?.cancel()
+        cooldownJob = viewModelScope.launch {
+            for (remaining in seconds downTo 1) {
+                _cooldownSeconds.value = remaining
+                delay(1000)
+            }
+            _cooldownSeconds.value = 0
+            if (!_realBeaconActive.value) _realStatus.value = "Ready for another bounded BLE test"
+        }
     }
 
     fun setBrand(brand: BleSpamBrand) {
@@ -288,13 +298,9 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
     private fun loadAdvertisementSets() {
         val sets = when (_brand.value) {
             BleSpamBrand.APPLE -> ContinuityNewDevicePopUpAdvertisementSetGenerator.getAdvertisementSets()
-            BleSpamBrand.SAMSUNG ->
-                EasySetupWatchAdvertisementSetGenerator.getAdvertisementSets() +
-                    EasySetupBudsAdvertisementSetGenerator.getAdvertisementSets()
-            BleSpamBrand.ALL ->
-                ContinuityNewDevicePopUpAdvertisementSetGenerator.getAdvertisementSets() +
-                    EasySetupWatchAdvertisementSetGenerator.getAdvertisementSets() +
-                    EasySetupBudsAdvertisementSetGenerator.getAdvertisementSets()
+            BleSpamBrand.SAMSUNG -> EasySetupWatchAdvertisementSetGenerator.getAdvertisementSets() + EasySetupBudsAdvertisementSetGenerator.getAdvertisementSets()
+            BleSpamBrand.ALL -> ContinuityNewDevicePopUpAdvertisementSetGenerator.getAdvertisementSets() +
+                EasySetupWatchAdvertisementSetGenerator.getAdvertisementSets() + EasySetupBudsAdvertisementSetGenerator.getAdvertisementSets()
         }
         allAdvertisementSets = sets
         selectedSets = sets
@@ -303,9 +309,7 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setCheckedPayloads(checkedStates: List<Boolean>) {
         if (_isActive.value) return
-        selectedSets = allAdvertisementSets.filterIndexed { index, _ ->
-            checkedStates.getOrNull(index) == true
-        }
+        selectedSets = allAdvertisementSets.filterIndexed { index, _ -> checkedStates.getOrNull(index) == true }
         _advertisementSets.value = allAdvertisementSets
     }
 
@@ -325,7 +329,8 @@ class BleSpamViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         stopSimulation()
-        stopRealBeaconInternal("screen closed")
+        cooldownJob?.cancel()
+        stopRealBeaconInternal("screen closed", startCooldown = false)
         super.onCleared()
     }
 }
