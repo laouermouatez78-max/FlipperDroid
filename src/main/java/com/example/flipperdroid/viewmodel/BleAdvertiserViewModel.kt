@@ -11,8 +11,12 @@ import android.os.Build
 import android.os.ParcelUuid
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 class BleAdvertiserViewModel(app: Application) : AndroidViewModel(app) {
@@ -23,24 +27,28 @@ class BleAdvertiserViewModel(app: Application) : AndroidViewModel(app) {
     private val _isAdvertising = MutableStateFlow(false)
     val isAdvertising: StateFlow<Boolean> = _isAdvertising
 
-    private val _status = MutableStateFlow("BLE test beacon ready")
+    private val _status = MutableStateFlow("BLE V5 test beacon ready")
     val status: StateFlow<String> = _status
 
-    private val _localName = MutableStateFlow("FlipperDroid-V4")
+    private val _localName = MutableStateFlow("FlipperDroid-V5")
     val localName: StateFlow<String> = _localName
 
-    private val serviceUuid = UUID.fromString("f1d00001-7a91-4c4e-9b6a-4f6c69707034")
+    private val serviceUuid = UUID.fromString("f1d00001-7a91-4c4e-9b6a-4f6c69707035")
     private var previousAdapterName: String? = null
     private var renamedAdapter = false
+    private var autoStopJob: Job? = null
 
     private val callback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
             _isAdvertising.value = true
-            _status.value = "Beacon active · V4 service UUID visible"
+            _status.value = "Beacon active · V5 service UUID visible · auto-stop in 60 s"
+            scheduleAutoStop()
         }
 
         override fun onStartFailure(errorCode: Int) {
             _isAdvertising.value = false
+            autoStopJob?.cancel()
+            autoStopJob = null
             _status.value = "Beacon failed · ${advertiseError(errorCode)}"
             restoreAdapterName()
         }
@@ -48,9 +56,7 @@ class BleAdvertiserViewModel(app: Application) : AndroidViewModel(app) {
 
     fun requiredPermissions(): Array<String> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         arrayOf(Manifest.permission.BLUETOOTH_ADVERTISE, Manifest.permission.BLUETOOTH_CONNECT)
-    } else {
-        emptyArray()
-    }
+    } else emptyArray()
 
     fun permissionsGranted(): Boolean {
         val app = getApplication<Application>()
@@ -61,7 +67,7 @@ class BleAdvertiserViewModel(app: Application) : AndroidViewModel(app) {
 
     fun updateName(value: String) {
         if (_isAdvertising.value) return
-        _localName.value = value.filter { !it.isISOControl() }.take(20).ifBlank { "FlipperDroid-V4" }
+        _localName.value = value.filter { !it.isISOControl() }.take(20).ifBlank { "FlipperDroid-V5" }
     }
 
     fun canAdvertise(): Boolean = runCatching {
@@ -90,6 +96,7 @@ class BleAdvertiserViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
 
+        autoStopJob?.cancel()
         runCatching {
             previousAdapterName = runCatching { bt.name }.getOrNull()
             if (_localName.value.isNotBlank()) {
@@ -109,7 +116,7 @@ class BleAdvertiserViewModel(app: Application) : AndroidViewModel(app) {
             val data = AdvertiseData.Builder()
                 .setIncludeDeviceName(false)
                 .addServiceUuid(ParcelUuid(serviceUuid))
-                .addManufacturerData(0xFFFF, byteArrayOf(0x46, 0x44, 0x34))
+                .addManufacturerData(0xFFFF, byteArrayOf(0x46, 0x44, 0x35))
                 .build()
 
             val scanResponse = AdvertiseData.Builder()
@@ -117,28 +124,36 @@ class BleAdvertiserViewModel(app: Application) : AndroidViewModel(app) {
                 .build()
 
             adv.startAdvertising(settings, data, scanResponse, callback)
-            _status.value = "Starting BLE test beacon…"
+            _status.value = "Starting BLE V5 test beacon…"
         }.onFailure {
             restoreAdapterName()
-            _status.value = "Beacon error: ${it.message ?: it.javaClass.simpleName}"
+            _status.value = "Beacon error: ${it.message?.take(120) ?: it.javaClass.simpleName}"
         }
     }
 
-    fun stop() {
-        if (permissionsGranted()) {
-            runCatching { advertiser?.stopAdvertising(callback) }
-        }
+    fun stop() = stop("BLE test beacon stopped")
+
+    private fun stop(message: String) {
+        autoStopJob?.cancel()
+        autoStopJob = null
+        if (permissionsGranted()) runCatching { advertiser?.stopAdvertising(callback) }
         _isAdvertising.value = false
         restoreAdapterName()
-        _status.value = "BLE test beacon stopped"
+        _status.value = message
+    }
+
+    private fun scheduleAutoStop() {
+        autoStopJob?.cancel()
+        autoStopJob = viewModelScope.launch {
+            delay(60_000)
+            if (_isAdvertising.value) stop("BLE test beacon auto-stopped after 60 seconds")
+        }
     }
 
     private fun restoreAdapterName() {
         if (!renamedAdapter || !permissionsGranted()) return
         val original = previousAdapterName
-        if (!original.isNullOrBlank()) {
-            runCatching { adapter?.name = original }
-        }
+        if (!original.isNullOrBlank()) runCatching { adapter?.name = original }
         previousAdapterName = null
         renamedAdapter = false
     }
@@ -153,7 +168,7 @@ class BleAdvertiserViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        stop()
+        stop("BLE test beacon stopped")
         super.onCleared()
     }
 }
