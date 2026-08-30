@@ -29,6 +29,7 @@ class MainActivity : ComponentActivity() {
     private val networkToolsViewModel: NetworkToolsViewModel by viewModels()
     private val wifiAuditViewModel: WifiDeautherViewModel by viewModels()
     private val lanAnalyzerViewModel: LanAnalyzerViewModel by viewModels()
+    private val osintViewModel: OsintViewModel by viewModels()
     private val usbInspectorViewModel: UsbInspectorViewModel by viewModels()
     private val badUsbViewModel: BadUsbViewModel by viewModels()
     private val emvCardEmulationViewModel: EmvCardEmulationViewModel by viewModels()
@@ -118,6 +119,7 @@ class MainActivity : ComponentActivity() {
             composable("wifi_deauther") { WifiDeautherScreen(navController, wifiAuditViewModel) }
             composable("lan_analyzer") { LanAnalyzerScreen(navController, lanAnalyzerViewModel) }
             composable("network") { NetworkToolsScreen(navController, networkToolsViewModel) }
+            composable("osint") { OsintScreen(navController, osintViewModel) }
             composable("usb_inspector") { UsbInspectorScreen(navController, usbInspectorViewModel) }
             composable("usb_hid_lab") { BadUsbScreen(navController, badUsbViewModel, usbInspectorViewModel) }
             composable("ir") { InfraredScreen(navController) }
