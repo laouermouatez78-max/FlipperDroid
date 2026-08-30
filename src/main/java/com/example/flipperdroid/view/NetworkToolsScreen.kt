@@ -3,6 +3,7 @@ package com.example.flipperdroid.view
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -10,21 +11,20 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.flipperdroid.viewmodel.NetworkToolsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NetworkToolsScreen(
-    navController: NavController,
-    viewModel: NetworkToolsViewModel = viewModel()
-) {
+fun NetworkToolsScreen(navController: NavController, viewModel: NetworkToolsViewModel) {
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     var host by remember { mutableStateOf("") }
     val results by viewModel.results.collectAsState()
     val isScanning by viewModel.isScanning.collectAsState()
@@ -34,7 +34,7 @@ fun NetworkToolsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Network Toolkit · V4") },
+                title = { Text("Network Toolkit · V5") },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -49,10 +49,7 @@ fun NetworkToolsScreen(
         }
     ) { paddingValues ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp),
+            modifier = Modifier.fillMaxSize().padding(paddingValues).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
@@ -61,21 +58,13 @@ fun NetworkToolsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Surface(
-                        shape = MaterialTheme.shapes.medium,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                    ) {
-                        Icon(
-                            Icons.Default.Router,
-                            contentDescription = null,
-                            modifier = Modifier.padding(10.dp).size(28.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) {
+                        Icon(Icons.Default.Router, contentDescription = null, modifier = Modifier.padding(10.dp).size(28.dp), tint = MaterialTheme.colorScheme.primary)
                     }
                     Column(Modifier.weight(1f)) {
-                        Text("Rootless Android diagnostics", fontWeight = FontWeight.Bold)
+                        Text("Rootless IPv4 / IPv6 diagnostics", fontWeight = FontWeight.Bold)
                         Text(
-                            "V4 uses standard Android networking APIs. No root, no su, and no dependency on the old bundled Nmap path.",
+                            "Standard Android/Java networking only: DNS, reachability, route state and six targeted TCP service checks. No root and no broad port scan.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -85,25 +74,19 @@ fun NetworkToolsScreen(
 
             OutlinedTextField(
                 value = host,
-                onValueChange = { host = it.take(253) },
-                label = { Text("Hostname or IP address") },
-                supportingText = { Text("Example: router.local or 192.168.1.1 · use only authorized targets") },
+                onValueChange = { host = it.take(500) },
+                label = { Text("Hostname, URL, IPv4 or IPv6") },
+                supportingText = { Text("Examples: router.local · 192.168.1.1 · 2001:db8::1 · use only authorized targets") },
                 leadingIcon = { Icon(Icons.Default.Dns, contentDescription = null) },
                 trailingIcon = {
-                    if (host.isNotBlank()) {
-                        IconButton(onClick = { host = "" }) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear target")
-                        }
-                    }
+                    if (host.isNotBlank()) IconButton(onClick = { host = "" }) { Icon(Icons.Default.Close, contentDescription = "Clear target") }
                 },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 enabled = !isScanning
             )
 
-            if (isScanning) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            }
+            if (isScanning) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
 
             LazyColumn(
                 modifier = Modifier.weight(1f),
@@ -111,49 +94,21 @@ fun NetworkToolsScreen(
                 contentPadding = PaddingValues(bottom = 8.dp)
             ) {
                 item {
-                    DiagnosticCard(
-                        title = "Reachability",
-                        subtitle = "Resolve the target and run a short reachability check.",
-                        icon = Icons.Default.NetworkPing,
-                        enabled = host.isNotBlank() && !isScanning,
-                        onClick = { viewModel.ping(host) }
-                    )
+                    DiagnosticCard("Reachability", "Resolve the target and run short Java/ping/TCP fallback checks.", Icons.Default.NetworkPing, host.isNotBlank() && !isScanning) { viewModel.ping(host) }
                 }
                 item {
-                    DiagnosticCard(
-                        title = "DNS Lookup",
-                        subtitle = "Resolve the selected hostname to its current IP addresses.",
-                        icon = Icons.Default.Language,
-                        enabled = host.isNotBlank() && !isScanning,
-                        onClick = { viewModel.dnsLookup(host) }
-                    )
+                    DiagnosticCard("DNS Lookup", "Resolve all current IPv4/IPv6 addresses and classify their scope.", Icons.Default.Language, host.isNotBlank() && !isScanning) { viewModel.dnsLookup(host) }
                 }
                 item {
-                    DiagnosticCard(
-                        title = "Android Route Check",
-                        subtitle = "Show interface, gateway, DNS and validation state for the active route.",
-                        icon = Icons.Default.Route,
-                        enabled = host.isNotBlank() && !isScanning,
-                        onClick = { viewModel.traceroute(host) }
-                    )
+                    DiagnosticCard("Android Route Check", "Show transport, interface, gateway, DNS, validation and metered state.", Icons.Default.Route, host.isNotBlank() && !isScanning) { viewModel.traceroute(host) }
                 }
                 item {
-                    DiagnosticCard(
-                        title = "Common Services",
-                        subtitle = "Check only six common TCP services on the explicit target.",
-                        icon = Icons.Default.Lan,
-                        enabled = host.isNotBlank() && !isScanning,
-                        onClick = { viewModel.checkCommonServices(host) }
-                    )
+                    DiagnosticCard("Common Services", "Check only SSH, DNS, HTTP, HTTPS, SMB and HTTP-alt on the explicit target.", Icons.Default.Lan, host.isNotBlank() && !isScanning) { viewModel.checkCommonServices(host) }
                 }
 
                 if (results.isNotEmpty()) {
                     item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("RESULTS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                             HorizontalDivider(modifier = Modifier.weight(1f))
                         }
@@ -161,35 +116,20 @@ fun NetworkToolsScreen(
                 }
 
                 items(results) { result ->
-                    val container = if (result.isError) {
-                        MaterialTheme.colorScheme.errorContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    }
-                    val content = if (result.isError) {
-                        MaterialTheme.colorScheme.onErrorContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                    ElevatedCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.elevatedCardColors(containerColor = container)
-                    ) {
+                    val container = if (result.isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant
+                    val content = if (result.isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                    ElevatedCard(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = container)) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Icon(
-                                    if (result.isError) Icons.Default.ErrorOutline else Icons.Default.CheckCircle,
-                                    contentDescription = null,
-                                    tint = if (result.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                                )
-                                Text(result.command, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = content)
+                                Icon(if (result.isError) Icons.Default.ErrorOutline else Icons.Default.CheckCircle, contentDescription = null, tint = if (result.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                                Text(result.command, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = content, modifier = Modifier.weight(1f))
+                                IconButton(onClick = { clipboard.setText(AnnotatedString(result.output)) }) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy result", tint = content)
+                                }
                             }
-                            Text(
-                                result.output,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                                color = content
-                            )
+                            SelectionContainer {
+                                Text(result.output, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, color = content)
+                            }
                         }
                     }
                 }

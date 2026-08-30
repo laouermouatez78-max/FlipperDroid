@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,6 +32,7 @@ fun BluetoothScannerScreen(navController: NavController, viewModel: BluetoothVie
     val status by viewModel.status.collectAsState()
     val connectedAddress by viewModel.connectedAddress.collectAsState()
     val services by viewModel.gattServices.collectAsState()
+    val isConnecting by viewModel.isConnecting.collectAsState()
     val elevatedCount = devices.count { it.trafficLevel == BleTrafficLevel.ELEVATED }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -49,7 +51,7 @@ fun BluetoothScannerScreen(navController: NavController, viewModel: BluetoothVie
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("BLE Explorer · V4") },
+                title = { Text("BLE Explorer · V5") },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -58,12 +60,9 @@ fun BluetoothScannerScreen(navController: NavController, viewModel: BluetoothVie
                 actions = {
                     IconButton(
                         onClick = { if (isScanning) viewModel.stopScan() else viewModel.startScan() },
-                        enabled = permissionsGranted
+                        enabled = permissionsGranted && !isConnecting
                     ) {
-                        Icon(
-                            if (isScanning) Icons.Default.Stop else Icons.Default.Refresh,
-                            contentDescription = if (isScanning) "Stop scan" else "Start scan"
-                        )
+                        Icon(if (isScanning) Icons.Default.Stop else Icons.Default.Refresh, contentDescription = if (isScanning) "Stop scan" else "Start scan")
                     }
                 }
             )
@@ -79,21 +78,13 @@ fun BluetoothScannerScreen(navController: NavController, viewModel: BluetoothVie
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Surface(
-                        shape = MaterialTheme.shapes.medium,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                    ) {
-                        Icon(
-                            Icons.Default.BluetoothSearching,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(10.dp).size(28.dp)
-                        )
+                    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) {
+                        Icon(Icons.AutoMirrored.Filled.BluetoothSearching, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(10.dp).size(28.dp))
                     }
                     Column(Modifier.weight(1f)) {
                         Text("Advertisement decoder + GATT explorer", fontWeight = FontWeight.Bold)
                         Text(
-                            "Passively decodes BLE names, UUIDs, manufacturer/service data, raw advertisement bytes, TX power and observed packet rate. Connect only to devices you own or are authorized to test.",
+                            "Passively decodes BLE advertisements. GATT metadata discovery is explicit, times out after 12 seconds, and should be used only with owned/authorized devices.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -109,48 +100,29 @@ fun BluetoothScannerScreen(navController: NavController, viewModel: BluetoothVie
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Bluetooth permission required", fontWeight = FontWeight.Bold)
                         Text("Android needs Nearby devices permission for BLE scan and GATT access.")
-                        Button(
-                            onClick = { permissionLauncher.launch(viewModel.requiredPermissions()) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        Button(onClick = { permissionLauncher.launch(viewModel.requiredPermissions()) }, modifier = Modifier.fillMaxWidth()) {
                             Text("Grant Bluetooth permissions")
                         }
                     }
                 }
             }
 
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surfaceVariant
-            ) {
+            Surface(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant) {
                 Row(
                     modifier = Modifier.padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (isScanning) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Icon(
-                        if (connectedAddress != null) Icons.Default.Link else Icons.Default.Bluetooth,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                    if (isScanning || isConnecting) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Icon(if (connectedAddress != null) Icons.Default.Link else Icons.Default.Bluetooth, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                     Text(status, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                     if (devices.isNotEmpty()) AssistChip(onClick = {}, label = { Text("${devices.size}") })
                 }
             }
 
             if (elevatedCount > 0) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
-                ) {
-                    Row(
-                        Modifier.padding(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+                    Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.WarningAmber, contentDescription = null)
                         Column(Modifier.weight(1f)) {
                             Text("Elevated BLE advertisement rate observed", fontWeight = FontWeight.Bold)
@@ -166,18 +138,12 @@ fun BluetoothScannerScreen(navController: NavController, viewModel: BluetoothVie
             if (connectedAddress != null) {
                 ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text("GATT connected", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                                 Text(connectedAddress ?: "", fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
                             }
-                            IconButton(onClick = viewModel::disconnectGatt) {
-                                Icon(Icons.Default.LinkOff, contentDescription = "Disconnect")
-                            }
+                            IconButton(onClick = viewModel::disconnectGatt) { Icon(Icons.Default.LinkOff, contentDescription = "Disconnect") }
                         }
 
                         if (services.isEmpty()) {
@@ -186,11 +152,7 @@ fun BluetoothScannerScreen(navController: NavController, viewModel: BluetoothVie
                         } else {
                             Text("${services.size} service(s)", style = MaterialTheme.typography.labelLarge)
                             services.take(20).forEach { service ->
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = MaterialTheme.shapes.small,
-                                    color = MaterialTheme.colorScheme.surfaceVariant
-                                ) {
+                                Surface(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surfaceVariant) {
                                     Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                         Text(service.uuid, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
                                         service.characteristics.take(30).forEach { characteristic ->
@@ -211,29 +173,11 @@ fun BluetoothScannerScreen(navController: NavController, viewModel: BluetoothVie
 
             if (devices.isEmpty()) {
                 Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(
-                            if (isScanning) Icons.Default.BluetoothSearching else Icons.Default.BluetoothDisabled,
-                            contentDescription = null,
-                            modifier = Modifier.size(52.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            if (isScanning) "Scanning for BLE devices…" else "No BLE devices listed yet",
-                            textAlign = TextAlign.Center,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            "Scans stop automatically after about 12 seconds.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        if (permissionsGranted && !isScanning) {
-                            Button(onClick = viewModel::startScan) { Text("Start scan") }
-                        }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Icon(if (isScanning) Icons.AutoMirrored.Filled.BluetoothSearching else Icons.Default.BluetoothDisabled, contentDescription = null, modifier = Modifier.size(52.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(if (isScanning) "Scanning for BLE devices…" else "No BLE devices listed yet", textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
+                        Text("Scans stop automatically after about 12 seconds.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (permissionsGranted && !isScanning && !isConnecting) Button(onClick = viewModel::startScan) { Text("Start scan") }
                     }
                 }
             } else {
@@ -243,7 +187,11 @@ fun BluetoothScannerScreen(navController: NavController, viewModel: BluetoothVie
                     contentPadding = PaddingValues(bottom = 8.dp)
                 ) {
                     items(devices, key = { it.address }) { device ->
-                        BleDeviceCard(device, connectedAddress == device.address) {
+                        BleDeviceCard(
+                            device = device,
+                            connected = connectedAddress == device.address,
+                            connectEnabled = !isConnecting || connectedAddress == device.address
+                        ) {
                             if (connectedAddress == device.address) viewModel.disconnectGatt() else viewModel.connectGatt(device.address)
                         }
                     }
@@ -254,22 +202,18 @@ fun BluetoothScannerScreen(navController: NavController, viewModel: BluetoothVie
 }
 
 @Composable
-private fun BleDeviceCard(device: BleDeviceInfo, connected: Boolean, onConnect: () -> Unit) {
+private fun BleDeviceCard(device: BleDeviceInfo, connected: Boolean, connectEnabled: Boolean, onConnect: () -> Unit) {
     var expanded by remember(device.address) { mutableStateOf(false) }
     val rateText = String.format(Locale.US, "%.1f", device.advertisementsPerSecond)
 
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(device.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(device.address, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
                 }
-                FilledTonalIconButton(onClick = onConnect, enabled = device.connectable != false) {
+                FilledTonalIconButton(onClick = onConnect, enabled = device.connectable != false && connectEnabled) {
                     Icon(if (connected) Icons.Default.LinkOff else Icons.Default.Link, contentDescription = if (connected) "Disconnect" else "Connect")
                 }
             }
@@ -277,22 +221,12 @@ private fun BleDeviceCard(device: BleDeviceInfo, connected: Boolean, onConnect: 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AssistChip(onClick = {}, label = { Text("${device.rssi} dBm") })
                 AssistChip(onClick = {}, label = { Text("$rateText adv/s") })
-                device.connectable?.let {
-                    AssistChip(onClick = {}, label = { Text(if (it) "Connectable" else "Broadcast only") })
-                }
+                device.connectable?.let { AssistChip(onClick = {}, label = { Text(if (it) "Connectable" else "Broadcast only") }) }
             }
 
             if (device.trafficLevel == BleTrafficLevel.ELEVATED) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.tertiaryContainer
-                ) {
-                    Row(
-                        Modifier.padding(9.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                Surface(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.tertiaryContainer) {
+                    Row(Modifier.padding(9.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Speed, contentDescription = null, modifier = Modifier.size(18.dp))
                         Text("Elevated observed advertisement rate", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
                     }
@@ -300,11 +234,7 @@ private fun BleDeviceCard(device: BleDeviceInfo, connected: Boolean, onConnect: 
             }
 
             if (device.serviceUuids.isNotEmpty()) {
-                Text(
-                    "Advertised services: ${device.serviceUuids.take(4).joinToString()}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text("Advertised services: ${device.serviceUuids.take(4).joinToString()}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             TextButton(onClick = { expanded = !expanded }) {
@@ -316,39 +246,24 @@ private fun BleDeviceCard(device: BleDeviceInfo, connected: Boolean, onConnect: 
             if (expanded) {
                 HorizontalDivider()
                 Text("Observed ${device.seenCount} packet(s)", style = MaterialTheme.typography.labelMedium)
-                device.txPower?.let {
-                    Text("Advertised TX power: $it dBm", style = MaterialTheme.typography.bodySmall)
-                }
+                device.txPower?.let { Text("Advertised TX power: $it dBm", style = MaterialTheme.typography.bodySmall) }
 
                 if (device.manufacturerData.isNotEmpty()) {
                     Text("Manufacturer data", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
                     device.manufacturerData.forEach { field ->
-                        Text(
-                            "0x${field.companyId.toString(16).uppercase().padStart(4, '0')}: ${field.dataHex.ifBlank { "<empty>" }}",
-                            fontFamily = FontFamily.Monospace,
-                            style = MaterialTheme.typography.labelSmall
-                        )
+                        Text("0x${field.companyId.toString(16).uppercase().padStart(4, '0')}: ${field.dataHex.ifBlank { "<empty>" }}", fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.labelSmall)
                     }
                 }
 
                 if (device.serviceData.isNotEmpty()) {
                     Text("Service data", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
                     device.serviceData.forEach { field ->
-                        Text(
-                            "${field.uuid}: ${field.dataHex.ifBlank { "<empty>" }}",
-                            fontFamily = FontFamily.Monospace,
-                            style = MaterialTheme.typography.labelSmall
-                        )
+                        Text("${field.uuid}: ${field.dataHex.ifBlank { "<empty>" }}", fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.labelSmall)
                     }
                 }
 
                 Text("Raw advertisement", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
-                Text(
-                    device.rawAdvertisementHex.ifBlank { "No raw bytes exposed by Android" },
-                    fontFamily = FontFamily.Monospace,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text(device.rawAdvertisementHex.ifBlank { "No raw bytes exposed by Android" }, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

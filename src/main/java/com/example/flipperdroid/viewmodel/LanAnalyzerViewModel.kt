@@ -12,12 +12,14 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.util.concurrent.atomic.AtomicInteger
 
 
 data class LanHost(
@@ -44,6 +46,12 @@ class LanAnalyzerViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _status = MutableStateFlow("Ready")
     val status: StateFlow<String> = _status
+
+    private val _progress = MutableStateFlow(0f)
+    val progress: StateFlow<Float> = _progress
+
+    private val _scannedCount = MutableStateFlow(0)
+    val scannedCount: StateFlow<Int> = _scannedCount
 
     private val commonPorts = listOf(22, 53, 80, 443, 445, 8080)
     private var scanJob: Job? = null
@@ -97,23 +105,37 @@ class LanAnalyzerViewModel(app: Application) : AndroidViewModel(app) {
         scanJob = viewModelScope.launch(Dispatchers.IO) {
             _isScanning.value = true
             _hosts.value = emptyList()
+            _progress.value = 0f
+            _scannedCount.value = 0
             _status.value = "Scanning your private $prefix.0/24…"
+            val completed = AtomicInteger(0)
             try {
-                // Keep concurrency moderate so low/mid-range phones remain responsive.
                 val semaphore = Semaphore(16)
-                val found = coroutineScope {
+                coroutineScope {
                     (1..254).map { last ->
                         async {
-                            semaphore.withPermit { probeHost("$prefix.$last") }
+                            semaphore.withPermit {
+                                val host = probeHost("$prefix.$last")
+                                if (host != null) {
+                                    _hosts.update { previous ->
+                                        (previous + host)
+                                            .distinctBy { it.ip }
+                                            .sortedBy { it.ip.substringAfterLast('.').toIntOrNull() ?: 0 }
+                                    }
+                                }
+                                val done = completed.incrementAndGet()
+                                _scannedCount.value = done
+                                _progress.value = done / 254f
+                                _status.value = "Scanning $prefix.0/24 · $done/254 · ${_hosts.value.size} host(s) found"
+                                host
+                            }
                         }
                     }.awaitAll()
-                        .filterNotNull()
-                        .sortedBy { it.ip.substringAfterLast('.').toIntOrNull() ?: 0 }
                 }
-                _hosts.value = found
-                _status.value = "Scan complete · ${found.size} responsive host(s)"
+                _status.value = "Scan complete · ${_hosts.value.size} responsive host(s)"
+                _progress.value = 1f
             } catch (e: kotlinx.coroutines.CancellationException) {
-                _status.value = "LAN scan stopped · ${_hosts.value.size} host(s) kept"
+                _status.value = "LAN scan stopped · ${_scannedCount.value}/254 checked · ${_hosts.value.size} host(s) kept"
                 throw e
             } catch (e: Exception) {
                 _status.value = "LAN scan error: ${e.message?.take(160) ?: e.javaClass.simpleName}"
@@ -128,14 +150,11 @@ class LanAnalyzerViewModel(app: Application) : AndroidViewModel(app) {
         scanJob?.cancel()
         scanJob = null
         _isScanning.value = false
-        _status.value = "LAN scan stopped"
+        _status.value = "LAN scan stopped · ${_scannedCount.value}/254 checked · ${_hosts.value.size} host(s) kept"
     }
 
     private fun probeHost(ip: String): LanHost? {
         val address = runCatching { InetAddress.getByName(ip) }.getOrNull() ?: return null
-
-        // InetAddress.isReachable() is unreliable on many Android builds because ICMP
-        // handling varies. Use Android's ping binary as a rootless fallback.
         val reachable = runCatching { address.isReachable(300) }.getOrDefault(false) || systemPing(ip)
         val ports = commonPorts.filter { port -> isPortOpen(ip, port, 180) }
         if (!reachable && ports.isEmpty()) return null
@@ -172,7 +191,7 @@ class LanAnalyzerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
-        private fun isPrivateIpv4(address: String): Boolean =
+        internal fun isPrivateIpv4(address: String): Boolean =
             address.startsWith("10.") ||
                 address.startsWith("192.168.") ||
                 Regex("^172\\.(1[6-9]|2\\d|3[01])\\.").containsMatchIn(address)

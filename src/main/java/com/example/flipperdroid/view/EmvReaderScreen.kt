@@ -35,7 +35,7 @@ fun EmvReaderScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("EMV Metadata Reader") },
+                title = { Text("EMV Metadata · V5") },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -50,15 +50,14 @@ fun EmvReaderScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Security, contentDescription = null)
-                    Column {
-                        Text("Privacy mode", fontWeight = FontWeight.Bold)
-                        Text("V3 identifies only the contactless application/scheme and AID. PAN, expiry, cardholder name and Track 2 are not read or retained.")
+                Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Column(Modifier.weight(1f)) {
+                        Text("Privacy-first application identification", fontWeight = FontWeight.Bold)
+                        Text(
+                            "V5 issues only PPSE/AID SELECT operations for its known application list. PAN, expiry, cardholder name, Track 2 and transaction data are not requested or retained.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
                 }
             }
@@ -68,6 +67,7 @@ fun EmvReaderScreen(
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("NFC tag ready", fontWeight = FontWeight.Bold)
                         Text("UID: ${lastUid ?: "detected"}", fontFamily = FontFamily.Monospace)
+                        Text("Use only a card you own or are explicitly authorized to inspect.", style = MaterialTheme.typography.bodySmall)
                         Button(
                             onClick = { lastTag?.let(viewModel::readCard) },
                             enabled = !isReading,
@@ -75,13 +75,13 @@ fun EmvReaderScreen(
                         ) {
                             Icon(Icons.Default.Contactless, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
-                            Text("Read EMV metadata")
+                            Text("Identify supported payment application")
                         }
                     }
                 }
             } else {
                 Text(
-                    "Present a contactless card once so Android detects the NFC tag, then return here to request metadata reading.",
+                    "Present a contactless card so Android detects the NFC tag, then request the privacy-mode application check.",
                     textAlign = TextAlign.Center
                 )
             }
@@ -89,36 +89,28 @@ fun EmvReaderScreen(
             when {
                 isReading -> {
                     CircularProgressIndicator(modifier = Modifier.size(48.dp))
-                    Text("Reading EMV application metadata…\nKeep the card steady.", textAlign = TextAlign.Center)
+                    Text("Reading application metadata…\nKeep the card steady.", textAlign = TextAlign.Center)
                 }
-
                 cardData != null -> {
-                    Icon(Icons.Default.CreditCard, contentDescription = null, modifier = Modifier.size(56.dp))
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
+                    Icon(Icons.Default.CreditCard, contentDescription = null, modifier = Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary)
+                    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("Detected application", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             Text("Scheme: ${cardData?.cardType ?: "Unknown"}")
-                            Text(
-                                "AID: ${cardData?.aid ?: "Unknown"}",
-                                fontFamily = FontFamily.Monospace,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
+                            Text("AID: ${cardData?.aid ?: "Unknown"}", fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium)
                             Text("Contactless: ${if (cardData?.contactless == true) "Yes" else "Unknown"}")
+                            AssistChip(onClick = {}, label = { Text(if (cardData?.privacyMode == true) "PRIVACY MODE" else "UNKNOWN MODE") })
                         }
                     }
-                    Button(onClick = { viewModel.clearData() }, modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = viewModel::clearData, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.Refresh, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text("Clear result")
                     }
                 }
-
                 error != null -> {
                     Text(error.orEmpty(), color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
-                    OutlinedButton(onClick = { viewModel.clearData() }) {
+                    OutlinedButton(onClick = viewModel::clearData) {
                         Icon(Icons.Default.Refresh, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text("Reset")

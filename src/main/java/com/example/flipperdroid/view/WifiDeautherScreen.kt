@@ -45,13 +45,10 @@ fun WifiDeautherScreen(navController: NavController, viewModel: WifiDeautherView
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         viewModel.refreshPrerequisiteState()
-        if (viewModel.permissionsGranted.value && viewModel.locationEnabled.value && viewModel.wifiReady.value) {
-            viewModel.startScan()
-        }
+        if (viewModel.permissionsGranted.value && viewModel.locationEnabled.value && viewModel.wifiReady.value) viewModel.startScan()
     }
 
     LaunchedEffect(Unit) { viewModel.initialize(context) }
-
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) viewModel.refreshPrerequisiteState()
@@ -60,10 +57,17 @@ fun WifiDeautherScreen(navController: NavController, viewModel: WifiDeautherView
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    val band24 = networks.count { it.band == "2.4 GHz" }
+    val band5 = networks.count { it.band == "5 GHz" }
+    val band6 = networks.count { it.band == "6 GHz" }
+    val legacySecurity = networks.count {
+        viewModel.getSecurityType(it.capabilities) in setOf(SecurityType.OPEN, SecurityType.WEP, SecurityType.WPA)
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Wi‑Fi Analyzer · V4") },
+                title = { Text("Wi‑Fi Analyzer · V5") },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -71,11 +75,9 @@ fun WifiDeautherScreen(navController: NavController, viewModel: WifiDeautherView
                 },
                 actions = {
                     IconButton(
-                        onClick = { viewModel.startScan() },
+                        onClick = viewModel::startScan,
                         enabled = permissionsGranted && locationEnabled && wifiReady && !isScanning
-                    ) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Scan")
-                    }
+                    ) { Icon(Icons.Default.Refresh, contentDescription = "Scan") }
                 }
             )
         }
@@ -85,15 +87,21 @@ fun WifiDeautherScreen(navController: NavController, viewModel: WifiDeautherView
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Column {
-                        Text("Real Android Wi‑Fi scan", fontWeight = FontWeight.Bold)
-                        Text("SSID/BSSID, channel, RSSI, frequency and security posture from the phone's Wi‑Fi scanner.")
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Column {
+                            Text("Real Android Wi‑Fi scan", fontWeight = FontWeight.Bold)
+                            Text("SSID/BSSID, channel, band, RSSI and security posture from Android scan results.", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    if (networks.isNotEmpty()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            AssistChip(onClick = {}, label = { Text("2.4G $band24") })
+                            AssistChip(onClick = {}, label = { Text("5G $band5") })
+                            if (band6 > 0) AssistChip(onClick = {}, label = { Text("6G $band6") })
+                            if (legacySecurity > 0) AssistChip(onClick = {}, label = { Text("LEGACY $legacySecurity") })
+                        }
                     }
                 }
             }
@@ -102,11 +110,8 @@ fun WifiDeautherScreen(navController: NavController, viewModel: WifiDeautherView
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Precise location permission required", fontWeight = FontWeight.Bold)
-                        Text("Android requires precise location permission to call Wi‑Fi startScan() and read scan results.")
-                        Button(
-                            onClick = { permissionLauncher.launch(viewModel.requiredPermissions()) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        Text("Android requires precise Location permission for Wi‑Fi scan results on supported versions.")
+                        Button(onClick = { permissionLauncher.launch(viewModel.requiredPermissions()) }, modifier = Modifier.fillMaxWidth()) {
                             Text("Grant Wi‑Fi scan permission")
                         }
                     }
@@ -121,12 +126,7 @@ fun WifiDeautherScreen(navController: NavController, viewModel: WifiDeautherView
                             Text("Android Location is off", fontWeight = FontWeight.Bold)
                         }
                         Text("Wi‑Fi scan results are blocked while Location services are disabled.")
-                        OutlinedButton(
-                            onClick = {
-                                context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        OutlinedButton(onClick = { context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.Settings, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
                             Text("Open Location settings")
@@ -142,14 +142,10 @@ fun WifiDeautherScreen(navController: NavController, viewModel: WifiDeautherView
                             Icon(Icons.Default.WifiOff, contentDescription = null)
                             Text("Wi‑Fi scanning unavailable", fontWeight = FontWeight.Bold)
                         }
-                        Text("Turn Wi‑Fi on, then return here and start the scan again.")
+                        Text("Turn Wi‑Fi on, then return here and scan again.")
                         OutlinedButton(
                             onClick = {
-                                val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                    Intent(Settings.Panel.ACTION_WIFI)
-                                } else {
-                                    Intent(Settings.ACTION_WIFI_SETTINGS)
-                                }
+                                val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) Intent(Settings.Panel.ACTION_WIFI) else Intent(Settings.ACTION_WIFI_SETTINGS)
                                 context.startActivity(intent)
                             },
                             modifier = Modifier.fillMaxWidth()
@@ -171,7 +167,7 @@ fun WifiDeautherScreen(navController: NavController, viewModel: WifiDeautherView
                         Icon(if (isScanning) Icons.Default.Wifi else Icons.Default.WifiOff, contentDescription = null, modifier = Modifier.size(48.dp))
                         Text(if (isScanning) "Scanning…" else "No Wi‑Fi results yet", textAlign = TextAlign.Center)
                         if (permissionsGranted && locationEnabled && wifiReady && !isScanning) {
-                            Button(onClick = { viewModel.startScan() }) { Text("Scan now") }
+                            Button(onClick = viewModel::startScan) { Text("Scan now") }
                         }
                     }
                 }
@@ -208,14 +204,16 @@ fun NetworkCard(network: WifiNetwork, viewModel: WifiDeautherViewModel) {
                 )
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("CH ${network.channel} · ${network.frequency} MHz")
+                Text("${network.band} · CH ${network.channel} · ${network.frequency} MHz")
                 Text("${network.rssi} dBm")
             }
             val securityLabel = when (security) {
                 SecurityType.OPEN -> "OPEN"
+                SecurityType.OWE -> "OWE"
                 SecurityType.WEP -> "WEP"
                 SecurityType.WPA -> "WPA"
                 SecurityType.WPA2 -> "WPA2"
+                SecurityType.WPA2_WPA3 -> "WPA2/3"
                 SecurityType.WPA3 -> "WPA3"
             }
             AssistChip(onClick = {}, label = { Text(securityLabel) })

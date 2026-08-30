@@ -32,27 +32,35 @@ fun InfraredScreen(navController: NavController) {
 
     fun transmit(pattern: IntArray) {
         val frequency = frequencyText.toIntOrNull()
-        if (!hasIr || irManager == null) {
+        if (!hasIr) {
             status = "This phone has no Consumer IR emitter"
             return
         }
-        if (frequency == null || frequency !in 20000..60000) {
-            status = "Use a carrier frequency between 20000 and 60000 Hz"
+        val manager = irManager ?: run {
+            status = "Consumer IR service became unavailable"
             return
         }
-        if (pattern.isEmpty() || pattern.size > 4096 || pattern.any { it <= 0 } || pattern.sumOf { it.toLong() } > 1_500_000L) {
-            status = "Invalid IR pattern (max 4096 timings / 1.5 s)"
+        if (frequency == null || frequency !in 20_000..60_000) {
+            status = "Use a carrier frequency between 20,000 and 60,000 Hz"
             return
         }
-        runCatching { irManager.transmit(frequency, pattern) }
-            .onSuccess { status = "IR transmitted · ${pattern.size} timings @ $frequency Hz" }
-            .onFailure { status = "IR transmit failed: ${it.message}" }
+        if (ranges.isNotEmpty() && ranges.none { frequency in it.minFrequency..it.maxFrequency }) {
+            status = "Carrier $frequency Hz is outside this phone's reported IR ranges"
+            return
+        }
+        if (pattern.isEmpty() || pattern.size > 4096 || pattern.any { it !in 1..200_000 } || pattern.sumOf { it.toLong() } > 1_500_000L) {
+            status = "Invalid IR pattern (1-4096 timings, each <=200 ms, total <=1.5 s)"
+            return
+        }
+        runCatching { manager.transmit(frequency, pattern) }
+            .onSuccess { status = "IR transmitted · ${pattern.size} timings · ${pattern.sum()} µs @ $frequency Hz" }
+            .onFailure { status = "IR transmit failed: ${it.message?.take(120) ?: it.javaClass.simpleName}" }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("IR Transmitter · V4") },
+                title = { Text("IR Transmitter · V5") },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -70,7 +78,7 @@ fun InfraredScreen(navController: NavController) {
                     Icon(Icons.Default.SettingsRemote, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Column {
                         Text("Real Consumer IR", fontWeight = FontWeight.Bold)
-                        Text(status)
+                        Text(status, style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -93,18 +101,19 @@ fun InfraredScreen(navController: NavController) {
             Text("Raw pattern", fontWeight = FontWeight.Bold)
             OutlinedTextField(
                 value = rawPattern,
-                onValueChange = { rawPattern = it },
+                onValueChange = { rawPattern = it.take(32_000) },
                 label = { Text("mark,space,mark,space… µs") },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 3,
-                textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace)
+                maxLines = 7,
+                textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace),
+                supportingText = { Text("Strict parser: invalid/empty timings are rejected instead of skipped") }
             )
             Button(
                 onClick = {
-                    val parsed = rawPattern.split(',', ' ', ';', '\n')
-                        .mapNotNull { it.trim().takeIf(String::isNotEmpty)?.toIntOrNull() }
-                        .toIntArray()
-                    transmit(parsed)
+                    val parsed = parseIrPattern(rawPattern)
+                    if (parsed == null) status = "Raw pattern contains an invalid timing. Use positive integer microseconds separated by comma/space/semicolon."
+                    else transmit(parsed)
                 },
                 enabled = hasIr,
                 modifier = Modifier.fillMaxWidth()
@@ -143,7 +152,7 @@ fun InfraredScreen(navController: NavController) {
             ) { Text("Transmit NEC frame") }
 
             Text(
-                "IR codes differ by device model. Use codes captured/documented for equipment you control. V4 sends exactly the pattern you provide.",
+                "IR codes differ by device model. Use captured/documented codes for equipment you control. V5 validates the pattern and phone carrier range before transmitting.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -151,7 +160,21 @@ fun InfraredScreen(navController: NavController) {
     }
 }
 
-private fun buildNecPattern(address: Int, command: Int): IntArray {
+internal fun parseIrPattern(value: String): IntArray? {
+    val normalized = value.trim()
+    if (normalized.isEmpty()) return null
+    val tokens = normalized.split(Regex("[,;\\s]+"))
+    if (tokens.isEmpty() || tokens.size > 4096) return null
+    val timings = IntArray(tokens.size)
+    for ((index, token) in tokens.withIndex()) {
+        val timing = token.toIntOrNull() ?: return null
+        if (timing !in 1..200_000) return null
+        timings[index] = timing
+    }
+    return timings
+}
+
+internal fun buildNecPattern(address: Int, command: Int): IntArray {
     val bytes = intArrayOf(address and 0xFF, address.inv() and 0xFF, command and 0xFF, command.inv() and 0xFF)
     val timings = mutableListOf(9000, 4500)
     for (byte in bytes) {

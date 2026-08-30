@@ -25,6 +25,8 @@ fun LanAnalyzerScreen(navController: NavController, viewModel: LanAnalyzerViewMo
     val hosts by viewModel.hosts.collectAsState()
     val scanning by viewModel.isScanning.collectAsState()
     val status by viewModel.status.collectAsState()
+    val progress by viewModel.progress.collectAsState()
+    val scannedCount by viewModel.scannedCount.collectAsState()
 
     DisposableEffect(Unit) {
         viewModel.refreshLocalIp()
@@ -34,7 +36,7 @@ fun LanAnalyzerScreen(navController: NavController, viewModel: LanAnalyzerViewMo
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("LAN Analyzer · V4") },
+                title = { Text("LAN Analyzer · V5") },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -84,11 +86,15 @@ fun LanAnalyzerScreen(navController: NavController, viewModel: LanAnalyzerViewMo
             item {
                 if (scanning) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("$scannedCount/254 checked", style = MaterialTheme.typography.labelMedium)
+                            Text("${hosts.size} responsive", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        }
                         OutlinedButton(onClick = viewModel::stopScan, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.Stop, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
-                            Text("Stop LAN scan")
+                            Text("Stop and keep current results")
                         }
                     }
                 } else {
@@ -126,7 +132,7 @@ fun LanAnalyzerScreen(navController: NavController, viewModel: LanAnalyzerViewMo
                                 textAlign = TextAlign.Center
                             )
                             Text(
-                                "V4 scans only the private /24 attached to this phone.",
+                                "V5 scans only the private IPv4 /24 currently attached to this phone.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
@@ -140,6 +146,7 @@ fun LanAnalyzerScreen(navController: NavController, viewModel: LanAnalyzerViewMo
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("${hosts.size} HOST(S)", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                        if (scanning) AssistChip(onClick = {}, label = { Text("LIVE") })
                         HorizontalDivider(modifier = Modifier.weight(1f))
                     }
                 }
@@ -154,12 +161,12 @@ fun LanAnalyzerScreen(navController: NavController, viewModel: LanAnalyzerViewMo
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(host.ip, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                            AssistChip(onClick = {}, label = { Text("ONLINE") })
+                            AssistChip(onClick = {}, label = { Text("RESPONSIVE") })
                         }
                         host.hostname?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                         Text(
                             if (host.openPorts.isEmpty()) "Responsive · no checked common TCP service answered"
-                            else "Common services responding: ${host.openPorts.joinToString()}",
+                            else "Checked services responding: ${host.openPorts.joinToString()}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -175,7 +182,7 @@ fun LanAnalyzerScreen(navController: NavController, viewModel: LanAnalyzerViewMo
                     Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Default.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Text(
-                            "Use LAN discovery only on a network you own or are explicitly authorized to assess.",
+                            "Use LAN discovery only on a network you own or are explicitly authorized to assess. V5 checks a small fixed set of common TCP services.",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }

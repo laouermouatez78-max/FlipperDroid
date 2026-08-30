@@ -7,10 +7,11 @@ import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 
 /**
- * Privacy-first EMV metadata reader for FlipperDroid V3.
+ * Privacy-first EMV metadata reader for FlipperDroid V5.
  *
- * V3 identifies a supported payment application (AID/card scheme) but intentionally
- * does not read or retain PAN, expiry date, cardholder name or Track 2 data.
+ * V5 identifies a supported contactless payment application (AID/scheme) only.
+ * It deliberately does not issue commands intended to retrieve PAN, expiry date,
+ * cardholder name, Track 2 or transaction data.
  */
 class EmvCardReader {
 
@@ -36,10 +37,7 @@ class EmvCardReader {
             if (!isSuccessful(ppse)) return@withContext null
 
             for ((aid, scheme) in KNOWN_AIDS) {
-                val response = runCatching {
-                    iso.transceive(buildSelectCommand(aid.hexToByteArray()))
-                }.getOrNull() ?: continue
-
+                val response = runCatching { iso.transceive(buildSelectCommand(aid.hexToByteArray())) }.getOrNull() ?: continue
                 if (isSuccessful(response)) {
                     return@withContext EmvCardData(
                         cardType = scheme,
@@ -76,6 +74,7 @@ class EmvCardReader {
     }
 }
 
+/** Legacy nullable personal-data fields remain for source compatibility but V5 never populates them. */
 data class EmvCardData(
     var pan: String? = null,
     var expiryDate: String? = null,

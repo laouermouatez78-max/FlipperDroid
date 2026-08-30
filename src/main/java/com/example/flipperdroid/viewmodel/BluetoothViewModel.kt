@@ -19,21 +19,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /** Parsed manufacturer-specific field from a BLE advertisement. */
-data class BleManufacturerPayload(
-    val companyId: Int,
-    val dataHex: String
-)
+data class BleManufacturerPayload(val companyId: Int, val dataHex: String)
 
 /** Parsed service-data field from a BLE advertisement. */
-data class BleServicePayload(
-    val uuid: String,
-    val dataHex: String
-)
+data class BleServicePayload(val uuid: String, val dataHex: String)
 
-enum class BleTrafficLevel {
-    NORMAL,
-    ELEVATED
-}
+enum class BleTrafficLevel { NORMAL, ELEVATED }
 
 data class BleDeviceInfo(
     val name: String,
@@ -60,24 +51,16 @@ data class GattCharacteristicInfo(
     val notifiable: Boolean
 )
 
-data class GattServiceInfo(
-    val uuid: String,
-    val characteristics: List<GattCharacteristicInfo>
-)
+data class GattServiceInfo(val uuid: String, val characteristics: List<GattCharacteristicInfo>)
 
-/**
- * BLE Explorer for authorized/owned-device analysis.
- *
- * The scanner decodes passive advertisement metadata, exposes raw packet bytes and
- * provides a simple observation-rate indicator. The indicator is intentionally
- * descriptive only: a high advertising rate is not proof of malicious activity.
- */
+/** Passive BLE advertisement explorer plus explicit GATT metadata discovery for owned/authorized devices. */
 class BluetoothViewModel : ViewModel() {
     private var appContext: Context? = null
     private var adapter: BluetoothAdapter? = null
     private var scanning = false
     private var activeGatt: BluetoothGatt? = null
     private var scanTimeoutJob: Job? = null
+    private var gattTimeoutJob: Job? = null
 
     private val _devices = MutableStateFlow<List<BleDeviceInfo>>(emptyList())
     val devices: StateFlow<List<BleDeviceInfo>> = _devices
@@ -97,11 +80,11 @@ class BluetoothViewModel : ViewModel() {
     private val _gattServices = MutableStateFlow<List<GattServiceInfo>>(emptyList())
     val gattServices: StateFlow<List<GattServiceInfo>> = _gattServices
 
+    private val _isConnecting = MutableStateFlow(false)
+    val isConnecting: StateFlow<Boolean> = _isConnecting
+
     fun requiredPermissions(): Array<String> = when {
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> arrayOf(
-            Manifest.permission.BLUETOOTH_SCAN,
-            Manifest.permission.BLUETOOTH_CONNECT
-        )
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
         else -> emptyArray()
     }
@@ -164,7 +147,7 @@ class BluetoothViewModel : ViewModel() {
             .onFailure {
                 scanning = false
                 _isScanning.value = false
-                _status.value = "BLE scan could not start: ${it.message ?: it.javaClass.simpleName}"
+                _status.value = "BLE scan could not start: ${it.message?.take(120) ?: it.javaClass.simpleName}"
                 return
             }
 
@@ -193,9 +176,7 @@ class BluetoothViewModel : ViewModel() {
         runCatching { adapter?.bluetoothLeScanner?.stopScan(scanCallback) }
         scanning = false
         _isScanning.value = false
-        if (updateStatus) {
-            _status.value = "Scan stopped · ${_devices.value.size} device(s)"
-        }
+        if (updateStatus) _status.value = "Scan stopped · ${_devices.value.size} device(s)"
     }
 
     @SuppressLint("MissingPermission")
@@ -217,11 +198,16 @@ class BluetoothViewModel : ViewModel() {
             _status.value = "Turn Bluetooth on before connecting"
             return
         }
+        if (_isConnecting.value) {
+            _status.value = "A GATT connection attempt is already running"
+            return
+        }
 
         stopScan(updateStatus = false)
         disconnectGatt(updateStatus = false)
         _status.value = "Connecting to $address…"
         _gattServices.value = emptyList()
+        _isConnecting.value = true
 
         runCatching {
             val device = bt.getRemoteDevice(address)
@@ -231,8 +217,10 @@ class BluetoothViewModel : ViewModel() {
                 @Suppress("DEPRECATION")
                 device.connectGatt(context, false, gattCallback)
             }
+            scheduleGattTimeout(address)
         }.onFailure {
-            _status.value = "GATT connection error: ${it.message ?: it.javaClass.simpleName}"
+            _isConnecting.value = false
+            _status.value = "GATT connection error: ${it.message?.take(120) ?: it.javaClass.simpleName}"
         }
     }
 
@@ -240,6 +228,9 @@ class BluetoothViewModel : ViewModel() {
 
     @SuppressLint("MissingPermission")
     private fun disconnectGatt(updateStatus: Boolean) {
+        gattTimeoutJob?.cancel()
+        gattTimeoutJob = null
+        _isConnecting.value = false
         val gatt = activeGatt
         activeGatt = null
         runCatching { gatt?.disconnect() }
@@ -247,6 +238,17 @@ class BluetoothViewModel : ViewModel() {
         _connectedAddress.value = null
         _gattServices.value = emptyList()
         if (updateStatus && gatt != null) _status.value = "GATT disconnected"
+    }
+
+    private fun scheduleGattTimeout(address: String) {
+        gattTimeoutJob?.cancel()
+        gattTimeoutJob = viewModelScope.launch {
+            delay(12_000)
+            if (_isConnecting.value && _connectedAddress.value == null) {
+                disconnectGatt(updateStatus = false)
+                _status.value = "GATT connection timed out after 12 seconds · $address"
+            }
+        }
     }
 
     private val scanCallback = object : ScanCallback() {
@@ -261,30 +263,18 @@ class BluetoothViewModel : ViewModel() {
             val seenCount = (previous?.seenCount ?: 0) + 1
             val elapsedMs = (now - firstSeen).coerceAtLeast(1L)
             val rate = if (seenCount <= 1) 0.0 else (seenCount - 1) * 1000.0 / elapsedMs.toDouble()
-            val trafficLevel = if (seenCount >= 12 && rate >= 8.0) {
-                BleTrafficLevel.ELEVATED
-            } else {
-                BleTrafficLevel.NORMAL
-            }
+            val trafficLevel = if (seenCount >= 12 && rate >= 8.0) BleTrafficLevel.ELEVATED else BleTrafficLevel.NORMAL
 
             val manufacturerData = record?.manufacturerSpecificData?.let { sparse ->
                 buildList {
                     for (index in 0 until sparse.size()) {
-                        add(
-                            BleManufacturerPayload(
-                                companyId = sparse.keyAt(index),
-                                dataHex = sparse.valueAt(index).toHex()
-                            )
-                        )
+                        add(BleManufacturerPayload(companyId = sparse.keyAt(index), dataHex = sparse.valueAt(index).toHex()))
                     }
                 }
             }.orEmpty()
 
             val serviceData = record?.serviceData.orEmpty().map { (uuid, payload) ->
-                BleServicePayload(
-                    uuid = uuid.uuid.toString(),
-                    dataHex = payload.toHex()
-                )
+                BleServicePayload(uuid = uuid.uuid.toString(), dataHex = payload.toHex())
             }
 
             val info = BleDeviceInfo(
@@ -329,6 +319,8 @@ class BluetoothViewModel : ViewModel() {
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
+                gattTimeoutJob?.cancel()
+                _isConnecting.value = false
                 _status.value = "GATT error · status $status"
                 _connectedAddress.value = null
                 _gattServices.value = emptyList()
@@ -339,12 +331,18 @@ class BluetoothViewModel : ViewModel() {
 
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
+                    gattTimeoutJob?.cancel()
+                    gattTimeoutJob = null
+                    _isConnecting.value = false
                     _connectedAddress.value = gatt.device.address
                     _status.value = "Connected · discovering GATT services…"
                     val started = runCatching { gatt.discoverServices() }.getOrDefault(false)
                     if (!started) _status.value = "Connected, but service discovery could not start"
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
+                    gattTimeoutJob?.cancel()
+                    gattTimeoutJob = null
+                    _isConnecting.value = false
                     _status.value = "GATT disconnected"
                     _connectedAddress.value = null
                     _gattServices.value = emptyList()
@@ -388,6 +386,8 @@ class BluetoothViewModel : ViewModel() {
     }
 
     override fun onCleared() {
+        scanTimeoutJob?.cancel()
+        gattTimeoutJob?.cancel()
         stopScan(updateStatus = false)
         disconnectGatt(updateStatus = false)
         super.onCleared()

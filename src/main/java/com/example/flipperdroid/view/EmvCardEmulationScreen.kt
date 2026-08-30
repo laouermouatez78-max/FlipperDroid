@@ -29,6 +29,7 @@ fun EmvCardEmulationScreen(
     val isActive by viewModel.isEmulationActive.collectAsState()
     val transcript by viewModel.transcript.collectAsState()
     val readerStatus by viewModel.readerStatus.collectAsState()
+    val readerBusy by viewModel.isReaderBusy.collectAsState()
     val lastTag by nfcViewModel.lastTag.collectAsState()
     val lastUid by nfcViewModel.currentTagUid.collectAsState()
     val lastType by nfcViewModel.currentTagType.collectAsState()
@@ -36,14 +37,14 @@ fun EmvCardEmulationScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("NFC APDU Lab · V4") },
+                title = { Text("NFC APDU Lab · V5.1") },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    IconButton(onClick = viewModel::clearTranscript) {
+                    IconButton(onClick = viewModel::clearTranscript, enabled = !readerBusy && transcript.isNotEmpty()) {
                         Icon(Icons.Default.Delete, contentDescription = "Clear transcript")
                     }
                 }
@@ -64,9 +65,9 @@ fun EmvCardEmulationScreen(
                     ) {
                         Icon(Icons.Default.Contactless, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Column(Modifier.weight(1f)) {
-                            Text("Real phone-to-phone APDU", fontWeight = FontWeight.Bold)
+                            Text("Real phone-to-phone APDU lab", fontWeight = FontWeight.Bold)
                             Text(
-                                "One Android phone emulates a custom FlipperDroid HCE card. A second phone sends real ISO-DEP APDUs: SELECT, PING and ECHO.",
+                                "Phone A exposes one custom FlipperDroid HCE AID. Phone B sends only the V5 lab SELECT, PING and ECHO commands; no payment credential profile is emulated.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -78,7 +79,7 @@ fun EmvCardEmulationScreen(
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("PHONE A · TEST CARD", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                        Text("PHONE A · CUSTOM TEST CARD", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -86,18 +87,11 @@ fun EmvCardEmulationScreen(
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text("FlipperDroid HCE card", fontWeight = FontWeight.Bold)
-                                Text(
-                                    if (isActive) "Active · ready for the second phone" else "Disabled",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
+                                Text(if (isActive) "Active · ready for Phone B" else "Disabled", style = MaterialTheme.typography.bodySmall)
                             }
-                            Switch(checked = isActive, onCheckedChange = viewModel::setEmulationActive)
+                            Switch(checked = isActive, onCheckedChange = viewModel::setEmulationActive, enabled = !readerBusy)
                         }
-                        Text(
-                            "AID: F0010203040506 · custom lab protocol only. No payment credentials are emulated.",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace
-                        )
+                        Text("AID: F0010203040506 · FlipperDroid lab namespace only", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
                     }
                 }
             }
@@ -114,15 +108,16 @@ fun EmvCardEmulationScreen(
                                 Text(lastType ?: "No ISO-DEP target captured", style = MaterialTheme.typography.bodySmall)
                             }
                         }
+                        if (readerBusy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                         Text(readerStatus, style = MaterialTheme.typography.bodySmall)
                         Button(
                             onClick = { viewModel.runReaderTest(lastTag) },
-                            enabled = lastTag != null,
+                            enabled = lastTag != null && !readerBusy,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Icon(Icons.Default.PlayArrow, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
-                            Text("Run real SELECT + PING + ECHO")
+                            Text(if (readerBusy) "APDU exchange running…" else "Run V5 SELECT + PING + ECHO")
                         }
                     }
                 }
@@ -131,7 +126,7 @@ fun EmvCardEmulationScreen(
             item {
                 Text("APDU transcript", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    "A passing test ends with REAL APDU TEST PASSED. The log below shows actual reader/card frames.",
+                    "A passing V5 test ends with REAL APDU TEST PASSED. Frames below are the actual custom lab exchange, not an EMV/payment emulation transcript.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -139,21 +134,13 @@ fun EmvCardEmulationScreen(
 
             if (transcript.isEmpty()) {
                 item {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        shape = MaterialTheme.shapes.medium
-                    ) {
+                    Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) {
                         Text("No APDU frames yet", modifier = Modifier.padding(16.dp))
                     }
                 }
             } else {
                 items(transcript.size) { index ->
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-                        shape = MaterialTheme.shapes.small
-                    ) {
+                    Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f), shape = MaterialTheme.shapes.small) {
                         Text(
                             transcript[index],
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),

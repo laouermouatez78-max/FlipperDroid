@@ -2,15 +2,18 @@ package com.example.flipperdroid.viewmodel
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import java.net.Inet6Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.net.URI
 import java.net.UnknownHostException
 
 
@@ -20,13 +23,7 @@ data class NetworkResult(
     val isError: Boolean = false
 )
 
-/**
- * Rootless V4 network diagnostics.
- *
- * This ViewModel intentionally avoids the legacy bundled Nmap + `su` workflow, which
- * fails on normal non-rooted Android devices. All checks use standard Android/Java
- * networking APIs and are intended for hosts the user owns or is authorized to test.
- */
+/** Rootless V5 diagnostics for an explicit user-supplied target. */
 class NetworkToolsViewModel : ViewModel() {
     private val _results = MutableStateFlow<List<NetworkResult>>(emptyList())
     val results: StateFlow<List<NetworkResult>> = _results
@@ -42,7 +39,7 @@ class NetworkToolsViewModel : ViewModel() {
 
     fun ping(host: String) {
         val target = normalizeHost(host) ?: run {
-            addResult("Reachability", "Enter a valid hostname or IP address.", true)
+            addResult("Reachability", "Enter a valid hostname, IPv4 address or IPv6 address.", true)
             return
         }
 
@@ -50,8 +47,9 @@ class NetworkToolsViewModel : ViewModel() {
             _isScanning.value = true
             try {
                 val started = System.currentTimeMillis()
-                val address = InetAddress.getByName(target)
+                val addresses = InetAddress.getAllByName(target).distinctBy { it.hostAddress }
                 val resolvedMs = System.currentTimeMillis() - started
+                val address = addresses.firstOrNull() ?: throw UnknownHostException(target)
 
                 val javaReachable = runCatching { address.isReachable(1200) }.getOrDefault(false)
                 val pingReachable = if (!javaReachable) systemPing(address.hostAddress ?: target) else false
@@ -61,15 +59,16 @@ class NetworkToolsViewModel : ViewModel() {
 
                 val output = buildString {
                     appendLine("Host: $target")
-                    appendLine("Address: ${address.hostAddress}")
+                    appendLine("Resolved addresses: ${addresses.joinToString { it.hostAddress ?: "?" }}")
+                    appendLine("Primary scope: ${addressScope(address)}")
                     appendLine("DNS resolution: ${resolvedMs} ms")
                     when {
                         javaReachable -> appendLine("Reachability: responsive via Java probe (${elapsed} ms total)")
                         pingReachable -> appendLine("Reachability: responsive via Android ping (${elapsed} ms total)")
                         tcpFallback != null -> appendLine("Reachability: TCP service $tcpFallback responded (${elapsed} ms total)")
                         else -> {
-                            appendLine("Reachability: no response to the available probes")
-                            appendLine("Note: target or network firewalls can block ICMP and TCP probes even when a host is online.")
+                            appendLine("Reachability: no response to available probes")
+                            appendLine("Note: ICMP/TCP can be filtered even when a host is online.")
                         }
                     }
                 }
@@ -86,7 +85,7 @@ class NetworkToolsViewModel : ViewModel() {
 
     fun dnsLookup(host: String) {
         val target = normalizeHost(host) ?: run {
-            addResult("DNS lookup", "Enter a valid hostname or IP address.", true)
+            addResult("DNS lookup", "Enter a valid hostname, IPv4 address or IPv6 address.", true)
             return
         }
 
@@ -103,7 +102,7 @@ class NetworkToolsViewModel : ViewModel() {
                         appendLine("No address returned.")
                     } else {
                         addresses.forEachIndexed { index, address ->
-                            appendLine("${index + 1}. ${address.hostAddress}")
+                            appendLine("${index + 1}. ${address.hostAddress} · ${if (address is Inet6Address) "IPv6" else "IPv4"} · ${addressScope(address)}")
                         }
                     }
                 }
@@ -118,13 +117,10 @@ class NetworkToolsViewModel : ViewModel() {
         }
     }
 
-    /**
-     * Compatibility name retained for the existing UI. This is a route/configuration
-     * check, not a packet-level traceroute.
-     */
+    /** Compatibility route/configuration check; intentionally not a packet-level traceroute. */
     fun traceroute(host: String) {
         val target = normalizeHost(host) ?: run {
-            addResult("Route check", "Enter a valid hostname or IP address.", true)
+            addResult("Route check", "Enter a valid hostname, IPv4 address or IPv6 address.", true)
             return
         }
 
@@ -138,22 +134,32 @@ class NetworkToolsViewModel : ViewModel() {
                 val props = active?.let { cm.getLinkProperties(it) }
                 val caps = active?.let { cm.getNetworkCapabilities(it) }
 
+                val transports = buildList {
+                    if (caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true) add("Wi‑Fi")
+                    if (caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true) add("Cellular")
+                    if (caps?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) == true) add("Ethernet")
+                    if (caps?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true) add("VPN")
+                }
+
                 val output = buildString {
                     appendLine("Target: $target (${address.hostAddress})")
+                    appendLine("Target scope: ${addressScope(address)}")
                     if (active == null || props == null) {
                         appendLine("No active Android network is available.")
                     } else {
+                        appendLine("Transport(s): ${transports.ifEmpty { listOf("other") }.joinToString()}")
                         appendLine("Interface: ${props.interfaceName ?: "unknown"}")
                         val gateways = props.routes.mapNotNull { it.gateway?.hostAddress }.distinct()
                         appendLine("Gateway(s): ${gateways.ifEmpty { listOf("not reported") }.joinToString()}")
                         val dns = props.dnsServers.mapNotNull { it.hostAddress }
                         appendLine("DNS server(s): ${dns.ifEmpty { listOf("not reported") }.joinToString()}")
                         appendLine("Local address(es): ${props.linkAddresses.joinToString { it.address.hostAddress ?: "?" }}")
-                        appendLine("Internet capability: ${caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true}")
-                        appendLine("Validated network: ${caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true}")
+                        appendLine("Internet capability: ${caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true}")
+                        appendLine("Validated network: ${caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true}")
+                        appendLine("Metered: ${caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) != true}")
                     }
                     appendLine()
-                    appendLine("This V4 check reports Android's active route configuration; it does not spoof a traceroute.")
+                    appendLine("V5 reports Android's route configuration; it does not pretend to run a packet-level traceroute.")
                 }
                 addResult("Route check $target", output, active == null)
             } catch (_: UnknownHostException) {
@@ -166,10 +172,10 @@ class NetworkToolsViewModel : ViewModel() {
         }
     }
 
-    /** Limited, targeted service check for the explicit host entered by the user. */
+    /** Limited targeted TCP service check for the explicit host entered by the user. */
     fun checkCommonServices(host: String) {
         val target = normalizeHost(host) ?: run {
-            addResult("Common services", "Enter a valid hostname or IP address.", true)
+            addResult("Common services", "Enter a valid hostname, IPv4 address or IPv6 address.", true)
             return
         }
 
@@ -186,8 +192,9 @@ class NetworkToolsViewModel : ViewModel() {
                     "Common services $target",
                     buildString {
                         appendLine("Target: $target (${address.hostAddress})")
+                        appendLine("Scope: ${addressScope(address)}")
                         lines.forEach { appendLine(it) }
-                        appendLine("Only six common TCP services were checked.")
+                        appendLine("Only six common TCP services were checked on this explicit target.")
                     }
                 )
             } catch (_: UnknownHostException) {
@@ -204,14 +211,19 @@ class NetworkToolsViewModel : ViewModel() {
         _results.value = emptyList()
     }
 
-    private fun normalizeHost(value: String): String? {
-        val host = value.trim()
-            .removePrefix("http://")
-            .removePrefix("https://")
-            .substringBefore('/')
-            .substringBefore(':')
-            .trim()
-        if (host.isBlank() || host.length > 253 || host.any { it.isWhitespace() }) return null
+    internal fun normalizeHost(value: String): String? {
+        val raw = value.trim()
+        if (raw.isBlank() || raw.length > 500 || raw.any { it == '\n' || it == '\r' || it == '\t' }) return null
+
+        val host = when {
+            raw.startsWith("[") && raw.contains(']') -> raw.substringAfter('[').substringBefore(']')
+            "://" in raw -> runCatching { URI(raw).host }.getOrNull()
+            raw.count { it == ':' } >= 2 -> raw.substringBefore('%').ifBlank { raw }
+            else -> runCatching { URI("probe://$raw").host }.getOrNull() ?: raw.substringBefore('/')
+        }?.trim()?.trimEnd('.')
+
+        if (host.isNullOrBlank() || host.length > 253 || host.any { it.isWhitespace() }) return null
+        if (!Regex("^[A-Za-z0-9._:%-]+$").matches(host)) return null
         return host
     }
 
@@ -236,6 +248,15 @@ class NetworkToolsViewModel : ViewModel() {
                 socket.isConnected
             }
         }.getOrDefault(false)
+
+    private fun addressScope(address: InetAddress): String = when {
+        address.isLoopbackAddress -> "loopback"
+        address.isLinkLocalAddress -> "link-local"
+        address.isSiteLocalAddress -> "private/site-local"
+        address.isMulticastAddress -> "multicast"
+        address.isAnyLocalAddress -> "unspecified/local"
+        else -> "public/global or provider-routed"
+    }
 
     private fun addResult(command: String, output: String, isError: Boolean = false) {
         _results.value = (_results.value + NetworkResult(command, output.trim(), isError)).takeLast(30)
