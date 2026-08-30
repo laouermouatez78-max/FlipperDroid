@@ -235,7 +235,7 @@ class WifiDeautherViewModel : ViewModel() {
     fun getSecurityType(capabilities: String): SecurityType {
         val caps = capabilities.uppercase(Locale.ROOT)
         val hasSae = "SAE" in caps || "WPA3" in caps
-        val hasPsk = "PSK" in caps || "WPA2" in caps || "RSN" in caps
+        val hasPsk = "PSK" in caps
         return when {
             "OWE" in caps -> SecurityType.OWE
             hasSae && hasPsk -> SecurityType.WPA2_WPA3
