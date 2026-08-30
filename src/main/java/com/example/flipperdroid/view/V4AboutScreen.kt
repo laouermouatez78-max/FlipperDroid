@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material.icons.filled.PersonSearch
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Card
@@ -62,15 +63,9 @@ fun V4AboutScreen(navController: NavController) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item {
-                Icon(Icons.Default.Android, contentDescription = "FlipperDroid V5", tint = MaterialTheme.colorScheme.primary)
-            }
-            item {
-                Text("FlipperDroid V5", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
-            }
-            item {
-                Text("Version 5.0.0", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-            }
+            item { Icon(Icons.Default.Android, contentDescription = "FlipperDroid V5", tint = MaterialTheme.colorScheme.primary) }
+            item { Text("FlipperDroid V5", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black) }
+            item { Text("Version 5.0.0", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary) }
             item {
                 Text(
                     "Android security, hardware and public-information analysis toolkit for authorized testing and public OSINT workflows.",
@@ -140,6 +135,30 @@ fun V4AboutScreen(navController: NavController) {
             item {
                 Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
                     Column(Modifier.padding(16.dp)) {
+                        Text("Domain & URL Defense", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
+                        ListItem(
+                            headlineContent = { Text("URL Risk Heuristics") },
+                            supportingContent = { Text("Local structural scoring for HTTP, IDN/punycode, embedded credentials, ports, encoding and sensitive-looking parameter names without printing parameter values.") },
+                            leadingContent = { Icon(Icons.Default.Shield, null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Mail Domain Security") },
+                            supportingContent = { Text("Public DNS observations for MX, SPF, DMARC, MTA-STS, TLS-RPT, CAA and DNSSEC authenticated-data.") },
+                            leadingContent = { Icon(Icons.Default.Shield, null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Defense report") },
+                            supportingContent = { Text("Copy or share defensive findings with explicit caveats that heuristic scores are not verdicts.") },
+                            leadingContent = { Icon(Icons.Default.Info, null) }
+                        )
+                    }
+                }
+            }
+
+            item {
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+                    Column(Modifier.padding(16.dp)) {
                         Text("File Intelligence", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(8.dp))
                         ListItem(
@@ -149,7 +168,7 @@ fun V4AboutScreen(navController: NavController) {
                         )
                         ListItem(
                             headlineContent = { Text("Image / EXIF") },
-                            supportingContent = { Text("Camera, software and timestamp metadata plus GPS/serial presence warnings without automatic coordinate disclosure.") },
+                            supportingContent = { Text("Camera, software and timestamp metadata plus GPS-presence warnings without automatic coordinate disclosure.") },
                             leadingContent = { Icon(Icons.Default.FilePresent, null) }
                         )
                         ListItem(
@@ -181,7 +200,7 @@ fun V4AboutScreen(navController: NavController) {
                         headlineContent = { Text("Authorized / Public Mode") },
                         supportingContent = {
                             Text(
-                                "Use active diagnostics only on authorized systems. Identity links are candidates, not proof of identity. File analysis is local. Web-surface checks are user-triggered and refuse local/private/special-use DNS targets."
+                                "Use active diagnostics only on authorized systems. Identity links are candidates, not proof of identity. File analysis is local. Public-network checks are user-triggered, and heuristic scores are indicators rather than conclusions."
                             )
                         },
                         leadingContent = { Icon(Icons.Default.Security, null) }
