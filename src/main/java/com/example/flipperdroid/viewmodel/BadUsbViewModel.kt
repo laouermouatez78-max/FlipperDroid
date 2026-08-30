@@ -4,21 +4,21 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
-import android.hardware.usb.UsbManager
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /**
- * V4 USB/HID training lab.
+ * V5 USB/HID training lab.
  *
- * The lab validates and simulates HID-style scripts locally. It never injects
- * keystrokes into a connected computer.
+ * HID-style scripts are parsed and replayed only into an on-screen preview log.
+ * No keyboard interface is claimed and no keystrokes are injected into another computer.
  */
 class BadUsbViewModel : ViewModel() {
 
@@ -37,64 +37,93 @@ class BadUsbViewModel : ViewModel() {
     private val _previewLog = MutableStateFlow<List<String>>(emptyList())
     val previewLog: StateFlow<List<String>> = _previewLog
 
-    private var usbManager: UsbManager? = null
+    private val _isSimulating = MutableStateFlow(false)
+    val isSimulating: StateFlow<Boolean> = _isSimulating
+
+    private var simulationJob: Job? = null
 
     fun initialize(context: Context) {
-        usbManager = context.getSystemService(Context.USB_SERVICE) as? UsbManager
         _isUsbHostAvailable.value = context.packageManager.hasSystemFeature(PackageManager.FEATURE_USB_HOST)
         _status.value = if (_isUsbHostAvailable.value) {
-            "USB Host detected · local HID simulation ready"
+            "USB Host detected · local HID parser ready"
         } else {
-            "USB Host is not supported on this phone · local simulation still available"
+            "USB Host is not supported on this phone · local parser still available"
         }
     }
 
-    /** Retained for compatibility with USB inspection flows; no endpoint is claimed. */
+    /** Retained for compatibility with USB inspection flows; no interface or endpoint is claimed. */
     fun connectUsb(device: UsbDevice, connection: UsbDeviceConnection) {
         connection.close()
         _isConnected.value = true
-        _status.value = "USB device ${device.vendorId}:${device.productId} detected · safe lab session"
-        appendLog("USB device detected; HID injection remains disabled in V4")
+        _status.value = "USB device %04X:%04X observed · safe local lab session".format(device.vendorId, device.productId)
+        appendLog("USB device observed; HID injection remains disabled in V5")
     }
 
     fun startLabSession() {
         _isConnected.value = true
-        _status.value = "USB HID simulation session active"
-        appendLog("V4 LAB session started")
+        _status.value = "USB HID local simulation session active"
+        appendLog("V5 LAB session started")
     }
 
     fun disconnect() {
+        stopSimulation()
         _isConnected.value = false
         _status.value = "USB HID lab session stopped"
-        appendLog("V4 LAB session stopped")
+        appendLog("V5 LAB session stopped")
     }
 
     fun updateScript(script: String) {
+        if (_isSimulating.value) return
         _currentScript.value = script.take(20_000)
     }
 
     fun executeScript() {
         val script = _currentScript.value
         if (script.isBlank()) {
-            _status.value = "Enter a script to simulate"
+            _status.value = "Enter a script to validate"
+            return
+        }
+        if (_isSimulating.value) {
+            _status.value = "A local script preview is already running"
             return
         }
         if (!_isConnected.value) startLabSession()
 
-        viewModelScope.launch {
-            _status.value = "Simulating ${script.length} character(s)…"
+        val lines = script.lines().filter { it.isNotBlank() }.take(200)
+        simulationJob?.cancel()
+        simulationJob = viewModelScope.launch {
+            _isSimulating.value = true
+            _status.value = "Previewing ${if (lines.isEmpty()) 1 else lines.size} local step(s)…"
             _previewLog.value = emptyList()
-            val lines = script.lines().filter { it.isNotBlank() }
-            if (lines.isEmpty()) {
-                appendLog("TYPE ${sanitize(script)}")
-            } else {
-                lines.take(200).forEachIndexed { index, line ->
-                    appendLog("STEP ${index + 1}: ${sanitize(line)}")
-                    delay(35)
+            try {
+                if (lines.isEmpty()) {
+                    appendLog("TEXT ${sanitize(script)}")
+                } else {
+                    lines.forEachIndexed { index, line ->
+                        appendLog("STEP ${index + 1}/${lines.size}: ${sanitize(line)}")
+                        delay(35)
+                    }
                 }
+                _status.value = "Preview complete · no USB keystrokes were sent"
+            } finally {
+                _isSimulating.value = false
+                simulationJob = null
             }
-            _status.value = "Simulation complete · no USB keystrokes were sent"
         }
+    }
+
+    fun stopSimulation() {
+        if (!_isSimulating.value && simulationJob == null) return
+        simulationJob?.cancel()
+        simulationJob = null
+        _isSimulating.value = false
+        _status.value = "Local script preview stopped · no USB keystrokes were sent"
+        appendLog("Preview stopped")
+    }
+
+    fun clearPreview() {
+        _previewLog.value = emptyList()
+        _status.value = "Preview log cleared"
     }
 
     private fun sanitize(value: String): String =
@@ -102,5 +131,10 @@ class BadUsbViewModel : ViewModel() {
 
     private fun appendLog(message: String) {
         _previewLog.value = (_previewLog.value + message).takeLast(160)
+    }
+
+    override fun onCleared() {
+        simulationJob?.cancel()
+        super.onCleared()
     }
 }
