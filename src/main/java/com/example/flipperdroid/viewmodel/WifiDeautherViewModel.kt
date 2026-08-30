@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.net.wifi.ScanResult
 import android.net.wifi.WifiManager
 import android.os.Build
@@ -53,6 +54,7 @@ data class WifiNetwork(
 class WifiDeautherViewModel : ViewModel() {
     private var appContext: Context? = null
     private var wifiManager: WifiManager? = null
+    private var locationManager: LocationManager? = null
     private var scanReceiver: BroadcastReceiver? = null
 
     private val _networks = MutableStateFlow<List<WifiNetwork>>(emptyList())
@@ -64,33 +66,72 @@ class WifiDeautherViewModel : ViewModel() {
     private val _permissionsGranted = MutableStateFlow(false)
     val permissionsGranted: StateFlow<Boolean> = _permissionsGranted
 
+    private val _locationEnabled = MutableStateFlow(false)
+    val locationEnabled: StateFlow<Boolean> = _locationEnabled
+
+    private val _wifiReady = MutableStateFlow(false)
+    val wifiReady: StateFlow<Boolean> = _wifiReady
+
     private val _status = MutableStateFlow("Wi-Fi audit not initialized")
     val status: StateFlow<String> = _status
 
-    fun requiredPermissions(): Array<String> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.NEARBY_WIFI_DEVICES)
-    } else {
-        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
-    }
+    /**
+     * WifiManager.startScan()/getScanResults() still require precise location on
+     * modern Android. NEARBY_WIFI_DEVICES is useful for other Wi-Fi APIs but is not
+     * a replacement for ACCESS_FINE_LOCATION for active scan results.
+     */
+    fun requiredPermissions(): Array<String> = arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
 
     fun initialize(context: Context) {
         appContext = context.applicationContext
         wifiManager = appContext?.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+        locationManager = appContext?.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
         registerScanReceiver()
-        refreshPermissionState()
-        _status.value = when {
-            wifiManager == null -> "Wi-Fi service unavailable"
-            wifiManager?.isWifiEnabled != true -> "Turn Wi-Fi on, then scan"
-            _permissionsGranted.value -> "Wi-Fi audit ready"
-            else -> "Grant Wi-Fi scan permissions"
+        refreshPrerequisiteState()
+
+        if (_permissionsGranted.value && _locationEnabled.value && _wifiReady.value) {
+            readScanResults("Cached scan results")
         }
     }
 
-    fun refreshPermissionState() {
+    fun refreshPermissionState() = refreshPrerequisiteState()
+
+    fun refreshPrerequisiteState() {
         val context = appContext ?: return
         _permissionsGranted.value = requiredPermissions().all {
             ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
         }
+        _locationEnabled.value = isLocationServiceEnabled()
+
+        val wifi = wifiManager
+        _wifiReady.value = when {
+            wifi == null -> false
+            wifi.isWifiEnabled -> true
+            else -> runCatching { wifi.isScanAlwaysAvailable }.getOrDefault(false)
+        }
+
+        if (!_isScanning.value) {
+            _status.value = when {
+                wifi == null -> "Wi-Fi service unavailable on this device"
+                !_permissionsGranted.value -> "Grant precise location for Wi-Fi scan results"
+                !_locationEnabled.value -> "Turn Android Location on for Wi-Fi scanning"
+                !_wifiReady.value -> "Turn Wi-Fi on (or enable Wi-Fi scanning in Location services)"
+                else -> "Wi-Fi audit ready"
+            }
+        }
+    }
+
+    private fun isLocationServiceEnabled(): Boolean {
+        val manager = locationManager ?: return false
+        return runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                manager.isLocationEnabled
+            } else {
+                @Suppress("DEPRECATION")
+                manager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                    manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+            }
+        }.getOrDefault(false)
     }
 
     private fun registerScanReceiver() {
@@ -99,6 +140,7 @@ class WifiDeautherViewModel : ViewModel() {
         scanReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 if (intent?.action == WifiManager.SCAN_RESULTS_AVAILABLE_ACTION) {
+                    refreshPrerequisiteState()
                     val fresh = intent.getBooleanExtra(WifiManager.EXTRA_RESULTS_UPDATED, false)
                     readScanResults(if (fresh) "Fresh scan complete" else "Cached scan results")
                 }
@@ -115,17 +157,23 @@ class WifiDeautherViewModel : ViewModel() {
 
     @SuppressLint("MissingPermission")
     fun startScan() {
-        refreshPermissionState()
+        refreshPrerequisiteState()
+
         if (!_permissionsGranted.value) {
-            _status.value = "Wi-Fi scan permission required"
+            _status.value = "Precise location permission is required for Wi-Fi scan results"
             return
         }
+        if (!_locationEnabled.value) {
+            _status.value = "Android Location is off — enable it, then scan again"
+            return
+        }
+
         val wifi = wifiManager ?: run {
             _status.value = "Wi-Fi service unavailable"
             return
         }
-        if (!wifi.isWifiEnabled) {
-            _status.value = "Turn Wi-Fi on in Android settings, then scan again"
+        if (!_wifiReady.value) {
+            _status.value = "Wi-Fi scanning is unavailable while Wi-Fi is off"
             return
         }
 
@@ -134,16 +182,27 @@ class WifiDeautherViewModel : ViewModel() {
         try {
             @Suppress("DEPRECATION")
             val started = wifi.startScan()
-            if (!started) readScanResults("Android throttled a fresh scan — cached results")
+            if (!started) {
+                readScanResults("Fresh scan throttled by Android — showing cached results")
+            }
         } catch (security: SecurityException) {
             _permissionsGranted.value = false
             _isScanning.value = false
-            _status.value = "Wi-Fi permission denied"
+            _status.value = "Wi-Fi scan blocked by Android permissions"
+        } catch (error: Exception) {
+            _isScanning.value = false
+            _status.value = "Wi-Fi scan error: ${error.message?.take(120) ?: error.javaClass.simpleName}"
         }
     }
 
     @SuppressLint("MissingPermission")
     private fun readScanResults(message: String) {
+        refreshPrerequisiteState()
+        if (!_permissionsGranted.value || !_locationEnabled.value) {
+            _isScanning.value = false
+            return
+        }
+
         try {
             val results = wifiManager?.scanResults.orEmpty()
                 .map(WifiNetwork::fromScanResult)
@@ -151,10 +210,16 @@ class WifiDeautherViewModel : ViewModel() {
                 .distinctBy { it.bssid }
                 .sortedWith(compareByDescending<WifiNetwork> { it.rssi }.thenBy { it.ssid })
             _networks.value = results
-            _status.value = "$message · ${results.size} network(s)"
+            _status.value = if (results.isEmpty()) {
+                "$message · no access points returned"
+            } else {
+                "$message · ${results.size} network(s)"
+            }
         } catch (security: SecurityException) {
             _permissionsGranted.value = false
-            _status.value = "Unable to read Wi-Fi results: permission denied"
+            _status.value = "Unable to read Wi-Fi results: precise location permission denied"
+        } catch (error: Exception) {
+            _status.value = "Unable to read Wi-Fi results: ${error.message?.take(120) ?: error.javaClass.simpleName}"
         } finally {
             _isScanning.value = false
         }

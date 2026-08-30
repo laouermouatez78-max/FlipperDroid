@@ -1,9 +1,9 @@
-name: Build FlipperDroid V4 APK
+name: Build FlipperDroid V5 APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [flipperdroid-v4, main]
+    branches: [flipperdroid-v4, flipperdroid-v5-osint, main]
     paths:
       - 'src/**'
       - 'gradle/**'
@@ -45,7 +45,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: FlipperDroid-V4-debug-apk
+          name: FlipperDroid-V5-debug-apk
           path: build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
@@ -54,7 +54,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: FlipperDroid-V4-test-reports
+          name: FlipperDroid-V5-test-reports
           path: build/reports/tests/**
           if-no-files-found: ignore
           retention-days: 7

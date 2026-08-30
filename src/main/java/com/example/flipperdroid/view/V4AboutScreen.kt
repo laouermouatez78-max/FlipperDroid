@@ -13,10 +13,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.FilePresent
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lan
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.ManageSearch
 import androidx.compose.material.icons.filled.Nfc
+import androidx.compose.material.icons.filled.PersonSearch
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Card
@@ -42,7 +49,7 @@ fun V4AboutScreen(navController: NavController) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("About FlipperDroid V4") },
+                title = { Text("About FlipperDroid V5") },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -52,52 +59,131 @@ fun V4AboutScreen(navController: NavController) {
         }
     ) { paddingValues ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp),
+            modifier = Modifier.fillMaxSize().padding(paddingValues).padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item {
-                Icon(
-                    Icons.Default.Android,
-                    contentDescription = "FlipperDroid V4",
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-
+            item { Icon(Icons.Default.Android, contentDescription = "FlipperDroid V5", tint = MaterialTheme.colorScheme.primary) }
+            item { Text("FlipperDroid V5", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black) }
+            item { Text("Version 5.0.0", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary) }
             item {
                 Text(
-                    "FlipperDroid V4",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Black
-                )
-            }
-
-            item {
-                Text(
-                    "Version 4.0.0",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-
-            item {
-                Text(
-                    "Android security and hardware toolkit for devices, tags and networks you own or are explicitly authorized to test.",
+                    "Android security, hardware and public-information analysis toolkit for authorized testing and public OSINT workflows.",
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center
                 )
             }
 
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
                     Column(Modifier.padding(16.dp)) {
-                        Text("V4 modules", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("V5 OSINT", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
+                        ListItem(
+                            headlineContent = { Text("Public Identity / Pseudonym") },
+                            supportingContent = { Text("Name and handle variants, public profile candidates and public search queries.") },
+                            leadingContent = { Icon(Icons.Default.PersonSearch, null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Domain & passive sources") },
+                            supportingContent = { Text("IDN parsing plus RDAP, certificate-transparency, archive and public-index links.") },
+                            leadingContent = { Icon(Icons.Default.Language, null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Live DNS & reverse") },
+                            supportingContent = { Text("A/AAAA resolution, address scope and canonical/reverse hostname hints.") },
+                            leadingContent = { Icon(Icons.Default.Public, null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Public Web Surface") },
+                            supportingContent = { Text("One explicit HTTP(S) target: status, redirect, security headers and TLS certificate metadata.") },
+                            leadingContent = { Icon(Icons.Default.Security, null) }
+                        )
+                    }
+                }
+            }
+
+            item {
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("Advanced OSINT", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
+                        ListItem(
+                            headlineContent = { Text("DNS Record Intelligence") },
+                            supportingContent = { Text("A, AAAA, MX, NS, TXT and CAA through explicit public DNS-over-HTTPS queries.") },
+                            leadingContent = { Icon(Icons.Default.Dns, null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("RDAP Registry Intelligence") },
+                            supportingContent = { Text("Public domain and IP allocation/registration metadata.") },
+                            leadingContent = { Icon(Icons.Default.ManageSearch, null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Local artifact analysis") },
+                            supportingContent = { Text("Typosquatting candidates, IOC extraction, email-header analysis and text fingerprints.") },
+                            leadingContent = { Icon(Icons.Default.ManageSearch, null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Report export") },
+                            supportingContent = { Text("Copy or share the assembled advanced OSINT findings as text.") },
+                            leadingContent = { Icon(Icons.Default.Info, null) }
+                        )
+                    }
+                }
+            }
+
+            item {
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("Domain & URL Defense", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
+                        ListItem(
+                            headlineContent = { Text("URL Risk Heuristics") },
+                            supportingContent = { Text("Local structural scoring for HTTP, IDN/punycode, embedded credentials, ports, encoding and sensitive-looking parameter names without printing parameter values.") },
+                            leadingContent = { Icon(Icons.Default.Shield, null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Mail Domain Security") },
+                            supportingContent = { Text("Public DNS observations for MX, SPF, DMARC, MTA-STS, TLS-RPT, CAA and DNSSEC authenticated-data.") },
+                            leadingContent = { Icon(Icons.Default.Shield, null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Defense report") },
+                            supportingContent = { Text("Copy or share defensive findings with explicit caveats that heuristic scores are not verdicts.") },
+                            leadingContent = { Icon(Icons.Default.Info, null) }
+                        )
+                    }
+                }
+            }
+
+            item {
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("File Intelligence", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
+                        ListItem(
+                            headlineContent = { Text("Hashes & signatures") },
+                            supportingContent = { Text("SHA-256/SHA-1, file magic, MIME/extension mismatch and entropy hints.") },
+                            leadingContent = { Icon(Icons.Default.FilePresent, null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Image / EXIF") },
+                            supportingContent = { Text("Camera, software and timestamp metadata plus GPS-presence warnings without automatic coordinate disclosure.") },
+                            leadingContent = { Icon(Icons.Default.FilePresent, null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("PDF / Office / package triage") },
+                            supportingContent = { Text("PDF metadata markers, OOXML creator/application properties, VBA marker and APK/ZIP package hints.") },
+                            leadingContent = { Icon(Icons.Default.FilePresent, null) }
+                        )
+                    }
+                }
+            }
+
+            item {
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("Other V5 modules", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(8.dp))
                         ListItem(headlineContent = { Text("NFC / RFID") }, leadingContent = { Icon(Icons.Default.Nfc, null) })
                         ListItem(headlineContent = { Text("BLE Scanner / Advertiser") }, leadingContent = { Icon(Icons.Default.Bluetooth, null) })
@@ -109,13 +195,14 @@ fun V4AboutScreen(navController: NavController) {
             }
 
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
                     ListItem(
-                        headlineContent = { Text("Owner Mode") },
-                        supportingContent = { Text("Use active diagnostics only on systems you control or have permission to assess.") },
+                        headlineContent = { Text("Authorized / Public Mode") },
+                        supportingContent = {
+                            Text(
+                                "Use active diagnostics only on authorized systems. Identity links are candidates, not proof of identity. File analysis is local. Public-network checks are user-triggered, and heuristic scores are indicators rather than conclusions."
+                            )
+                        },
                         leadingContent = { Icon(Icons.Default.Security, null) }
                     )
                 }
@@ -124,7 +211,7 @@ fun V4AboutScreen(navController: NavController) {
             item {
                 ListItem(
                     headlineContent = { Text("Build channel") },
-                    supportingContent = { Text("FlipperDroid V4 · 4.0.0") },
+                    supportingContent = { Text("FlipperDroid V5 · 5.0.0") },
                     leadingContent = { Icon(Icons.Default.Info, null) }
                 )
             }

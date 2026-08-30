@@ -53,7 +53,9 @@ class NetworkToolsViewModel : ViewModel() {
                 val address = InetAddress.getByName(target)
                 val resolvedMs = System.currentTimeMillis() - started
 
-                val reachable = runCatching { address.isReachable(1500) }.getOrDefault(false)
+                val javaReachable = runCatching { address.isReachable(1200) }.getOrDefault(false)
+                val pingReachable = if (!javaReachable) systemPing(address.hostAddress ?: target) else false
+                val reachable = javaReachable || pingReachable
                 val tcpFallback = if (!reachable) firstReachableService(address, listOf(443, 80), 800) else null
                 val elapsed = System.currentTimeMillis() - started
 
@@ -62,11 +64,12 @@ class NetworkToolsViewModel : ViewModel() {
                     appendLine("Address: ${address.hostAddress}")
                     appendLine("DNS resolution: ${resolvedMs} ms")
                     when {
-                        reachable -> appendLine("Reachability: responsive (${elapsed} ms total)")
+                        javaReachable -> appendLine("Reachability: responsive via Java probe (${elapsed} ms total)")
+                        pingReachable -> appendLine("Reachability: responsive via Android ping (${elapsed} ms total)")
                         tcpFallback != null -> appendLine("Reachability: TCP service $tcpFallback responded (${elapsed} ms total)")
                         else -> {
                             appendLine("Reachability: no response to the available probes")
-                            appendLine("Note: Android/network firewalls can block ICMP even when a host is online.")
+                            appendLine("Note: target or network firewalls can block ICMP and TCP probes even when a host is online.")
                         }
                     }
                 }
@@ -214,6 +217,17 @@ class NetworkToolsViewModel : ViewModel() {
 
     private fun firstReachableService(address: InetAddress, ports: List<Int>, timeoutMs: Int): Int? =
         ports.firstOrNull { canConnect(address, it, timeoutMs) }
+
+    private fun systemPing(host: String): Boolean = runCatching {
+        val process = ProcessBuilder("/system/bin/ping", "-c", "1", "-W", "1", host)
+            .redirectErrorStream(true)
+            .start()
+        try {
+            process.waitFor() == 0
+        } finally {
+            runCatching { process.destroy() }
+        }
+    }.getOrDefault(false)
 
     private fun canConnect(address: InetAddress, port: Int, timeoutMs: Int): Boolean =
         runCatching {

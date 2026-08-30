@@ -45,7 +45,7 @@ class LanAnalyzerViewModel(app: Application) : AndroidViewModel(app) {
     private val _status = MutableStateFlow("Ready")
     val status: StateFlow<String> = _status
 
-    private val commonPorts = listOf(22, 80, 443, 445)
+    private val commonPorts = listOf(22, 53, 80, 443, 445, 8080)
     private var scanJob: Job? = null
 
     init {
@@ -99,7 +99,8 @@ class LanAnalyzerViewModel(app: Application) : AndroidViewModel(app) {
             _hosts.value = emptyList()
             _status.value = "Scanning your private $prefix.0/24…"
             try {
-                val semaphore = Semaphore(24)
+                // Keep concurrency moderate so low/mid-range phones remain responsive.
+                val semaphore = Semaphore(16)
                 val found = coroutineScope {
                     (1..254).map { last ->
                         async {
@@ -132,11 +133,31 @@ class LanAnalyzerViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun probeHost(ip: String): LanHost? {
         val address = runCatching { InetAddress.getByName(ip) }.getOrNull() ?: return null
-        val reachable = runCatching { address.isReachable(220) }.getOrDefault(false)
-        val ports = commonPorts.filter { port -> isPortOpen(ip, port, 170) }
+
+        // InetAddress.isReachable() is unreliable on many Android builds because ICMP
+        // handling varies. Use Android's ping binary as a rootless fallback.
+        val reachable = runCatching { address.isReachable(300) }.getOrDefault(false) || systemPing(ip)
+        val ports = commonPorts.filter { port -> isPortOpen(ip, port, 180) }
         if (!reachable && ports.isEmpty()) return null
-        return LanHost(ip = ip, hostname = null, openPorts = ports, reachable = true)
+
+        return LanHost(
+            ip = ip,
+            hostname = null,
+            openPorts = ports,
+            reachable = true
+        )
     }
+
+    private fun systemPing(host: String): Boolean = runCatching {
+        val process = ProcessBuilder("/system/bin/ping", "-c", "1", "-W", "1", host)
+            .redirectErrorStream(true)
+            .start()
+        try {
+            process.waitFor() == 0
+        } finally {
+            runCatching { process.destroy() }
+        }
+    }.getOrDefault(false)
 
     private fun isPortOpen(host: String, port: Int, timeoutMs: Int): Boolean = runCatching {
         Socket().use { socket ->
