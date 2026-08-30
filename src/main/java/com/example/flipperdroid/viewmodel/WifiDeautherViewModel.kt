@@ -101,7 +101,7 @@ class WifiDeautherViewModel : ViewModel() {
         _permissionsGranted.value = requiredPermissions().all {
             ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
         }
-        _locationEnabled.value = runCatching { locationManager?.isLocationEnabled == true }.getOrDefault(false)
+        _locationEnabled.value = isLocationServiceEnabled()
 
         val wifi = wifiManager
         _wifiReady.value = when {
@@ -119,6 +119,19 @@ class WifiDeautherViewModel : ViewModel() {
                 else -> "Wi-Fi audit ready"
             }
         }
+    }
+
+    private fun isLocationServiceEnabled(): Boolean {
+        val manager = locationManager ?: return false
+        return runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                manager.isLocationEnabled
+            } else {
+                @Suppress("DEPRECATION")
+                manager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                    manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+            }
+        }.getOrDefault(false)
     }
 
     private fun registerScanReceiver() {
