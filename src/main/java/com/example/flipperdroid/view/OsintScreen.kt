@@ -8,8 +8,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.FilePresent
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.ManageSearch
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PersonSearch
 import androidx.compose.material.icons.filled.Public
@@ -63,7 +65,7 @@ fun OsintScreen(navController: NavController, viewModel: OsintViewModel) {
         ) {
             item {
                 ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Icon(Icons.Default.Public, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Text("Public-information analysis", fontWeight = FontWeight.Bold)
@@ -72,6 +74,23 @@ fun OsintScreen(navController: NavController, viewModel: OsintViewModel) {
                             "Analyze public names, pseudonyms, domains, DNS, TLS certificates, HTTP security headers, IP addresses and URLs. Active checks are explicit, low-volume and limited to the target you enter.",
                             style = MaterialTheme.typography.bodySmall
                         )
+                        HorizontalDivider()
+                        Button(
+                            onClick = { navController.navigate("osint_advanced") },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.ManageSearch, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Advanced OSINT")
+                        }
+                        OutlinedButton(
+                            onClick = { navController.navigate("osint_file") },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.FilePresent, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("File Intelligence")
+                        }
                     }
                 }
             }
