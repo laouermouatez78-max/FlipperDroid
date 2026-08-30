@@ -78,13 +78,26 @@ class OsintDefenseViewModel : ViewModel() {
             else -> "ELEVATED"
         }
 
+        val safeStructure = buildString {
+            append(scheme)
+            append("://")
+            append(asciiHost)
+            if (uri.port != -1) append(":${uri.port}")
+            append(uri.rawPath?.ifBlank { "/" } ?: "/")
+        }
+
         val output = buildString {
-            appendLine("URL: ${uri.toASCIIString()}")
+            appendLine("URL structure: $safeStructure")
             appendLine("Host: $host")
             appendLine("Unicode host: $unicodeHost")
             appendLine("Scheme: $scheme")
+            appendLine("Query parameters (${queryNames.size}): ${queryNames.distinct().joinToString(", ").ifBlank { "none" }}")
+            appendLine("Fragment present: ${!uri.rawFragment.isNullOrBlank()}")
+            appendLine("Embedded user-info present: ${!uri.userInfo.isNullOrBlank()}")
             appendLine("Heuristic score: $score/10 · $level")
             appendLine("Query values displayed: false")
+            appendLine("User-info values displayed: false")
+            appendLine("Fragment value displayed: false")
             appendLine()
             appendLine("Signals:")
             if (signals.isEmpty()) appendLine("• no local heuristic flags")
