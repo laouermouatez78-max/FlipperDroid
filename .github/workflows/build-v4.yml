@@ -3,7 +3,7 @@ name: Build FlipperDroid V5 APK
 on:
   workflow_dispatch:
   push:
-    branches: [flipperdroid-v4, flipperdroid-v5-osint, main]
+    branches: [flipperdroid-v4, flipperdroid-v5-osint, flipperdroid-v5-app-polish, main]
     paths:
       - 'src/**'
       - 'gradle/**'
@@ -24,10 +24,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
