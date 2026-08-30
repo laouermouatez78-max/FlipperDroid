@@ -3,6 +3,8 @@ package com.example.flipperdroid.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -11,11 +13,11 @@ import java.net.InetAddress
 import java.net.URI
 import java.net.URLEncoder
 import java.net.URL
+import java.security.cert.X509Certificate
 import java.text.Normalizer
 import java.text.SimpleDateFormat
 import java.util.Locale
 import javax.net.ssl.HttpsURLConnection
-import java.security.cert.X509Certificate
 
 
 data class OsintLink(
@@ -259,7 +261,7 @@ class OsintViewModel : ViewModel() {
                         val output = buildString {
                             appendLine("URL: ${uri.toASCIIString()}")
                             appendLine("HTTP status: $status")
-                            appendLine("Resolved: ${resolved.take(6).joinToString(", ") { it.hostAddress ?: "?" }}")
+                            appendLine("Resolved: ${resolved.take(6).joinToString(", ") { it.hostAddress }}")
                             appendLine("Server header: ${server ?: "not disclosed"}")
                             appendLine("Content-Type: ${contentType ?: "not disclosed"}")
                             appendLine("Redirect location: ${location ?: "none"}")
