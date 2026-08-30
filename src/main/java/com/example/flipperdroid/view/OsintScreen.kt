@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.PersonSearch
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -82,6 +83,14 @@ fun OsintScreen(navController: NavController, viewModel: OsintViewModel) {
                             Icon(Icons.Default.ManageSearch, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
                             Text("Advanced OSINT")
+                        }
+                        OutlinedButton(
+                            onClick = { navController.navigate("osint_defense") },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Shield, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Domain & URL Defense")
                         }
                         OutlinedButton(
                             onClick = { navController.navigate("osint_file") },
