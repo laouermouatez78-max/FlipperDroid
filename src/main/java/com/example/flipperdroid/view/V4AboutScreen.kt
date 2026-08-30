@@ -15,7 +15,9 @@ import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lan
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Nfc
+import androidx.compose.material.icons.filled.PersonSearch
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Usb
@@ -86,7 +88,7 @@ fun V4AboutScreen(navController: NavController) {
 
             item {
                 Text(
-                    "Android security, hardware and public-information analysis toolkit for authorized testing and local OSINT workflows.",
+                    "Android security, hardware and public-information analysis toolkit for authorized testing and public OSINT workflows.",
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center
                 )
@@ -98,9 +100,40 @@ fun V4AboutScreen(navController: NavController) {
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Column(Modifier.padding(16.dp)) {
-                        Text("V5 modules", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("V5 OSINT", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(8.dp))
-                        ListItem(headlineContent = { Text("OSINT Hub") }, leadingContent = { Icon(Icons.Default.Public, null) })
+                        ListItem(
+                            headlineContent = { Text("Public Identity / Pseudonym") },
+                            supportingContent = { Text("Name and handle variants, public profile candidates and public search queries.") },
+                            leadingContent = { Icon(Icons.Default.PersonSearch, null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Domain & passive sources") },
+                            supportingContent = { Text("IDN parsing plus RDAP, certificate-transparency, archive and public-index links.") },
+                            leadingContent = { Icon(Icons.Default.Language, null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Live DNS & reverse") },
+                            supportingContent = { Text("A/AAAA resolution, address scope and canonical/reverse hostname hints.") },
+                            leadingContent = { Icon(Icons.Default.Public, null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Public Web Surface") },
+                            supportingContent = { Text("One explicit HTTP(S) target: status, redirect, security headers and TLS certificate metadata.") },
+                            leadingContent = { Icon(Icons.Default.Security, null) }
+                        )
+                    }
+                }
+            }
+
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("Other V5 modules", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
                         ListItem(headlineContent = { Text("NFC / RFID") }, leadingContent = { Icon(Icons.Default.Nfc, null) })
                         ListItem(headlineContent = { Text("BLE Scanner / Advertiser") }, leadingContent = { Icon(Icons.Default.Bluetooth, null) })
                         ListItem(headlineContent = { Text("Wi‑Fi Audit") }, leadingContent = { Icon(Icons.Default.Wifi, null) })
@@ -117,7 +150,11 @@ fun V4AboutScreen(navController: NavController) {
                 ) {
                     ListItem(
                         headlineContent = { Text("Authorized / Public Mode") },
-                        supportingContent = { Text("Use active diagnostics only on authorized systems. Use OSINT features for public information and local analysis without accessing private accounts or credentials.") },
+                        supportingContent = {
+                            Text(
+                                "Use active diagnostics only on authorized systems. OSINT identity links are candidates, not proof of identity. The web-surface check is user-triggered, does not follow redirects automatically and refuses local/private/special-use DNS targets."
+                            )
+                        },
                         leadingContent = { Icon(Icons.Default.Security, null) }
                     )
                 }
