@@ -4,7 +4,6 @@ import android.content.Context
 import android.media.ExifInterface
 import android.net.Uri
 import android.provider.OpenableColumns
-import java.io.ByteArrayInputStream
 import java.security.MessageDigest
 import java.util.Locale
 import java.util.zip.ZipInputStream
@@ -107,8 +106,7 @@ object OsintFileAnalyzer {
                     val gpsPresent = !exif.getAttribute(ExifInterface.TAG_GPS_LATITUDE).isNullOrBlank() ||
                         !exif.getAttribute(ExifInterface.TAG_GPS_LONGITUDE).isNullOrBlank()
                     appendLine("• GPS metadata present: $gpsPresent")
-                    appendLine("• camera serial metadata present: ${!exif.getAttribute(ExifInterface.TAG_BODY_SERIAL_NUMBER).isNullOrBlank()}")
-                    appendLine("• lens serial metadata present: ${!exif.getAttribute(ExifInterface.TAG_LENS_SERIAL_NUMBER).isNullOrBlank()}")
+                    appendLine("• serial-number EXIF fields: not displayed by this analyzer")
                 }
             } ?: "Image metadata unavailable.\n"
         }.getOrElse { "Image metadata unavailable: ${it.message ?: it::class.java.simpleName}\n" }
