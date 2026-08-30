@@ -31,6 +31,7 @@ class MainActivity : ComponentActivity() {
     private val lanAnalyzerViewModel: LanAnalyzerViewModel by viewModels()
     private val osintViewModel: OsintViewModel by viewModels()
     private val advancedOsintViewModel: AdvancedOsintViewModel by viewModels()
+    private val osintDefenseViewModel: OsintDefenseViewModel by viewModels()
     private val usbInspectorViewModel: UsbInspectorViewModel by viewModels()
     private val badUsbViewModel: BadUsbViewModel by viewModels()
     private val emvCardEmulationViewModel: EmvCardEmulationViewModel by viewModels()
@@ -122,6 +123,7 @@ class MainActivity : ComponentActivity() {
             composable("network") { NetworkToolsScreen(navController, networkToolsViewModel) }
             composable("osint") { OsintScreen(navController, osintViewModel) }
             composable("osint_advanced") { AdvancedOsintScreen(navController, advancedOsintViewModel) }
+            composable("osint_defense") { OsintDefenseScreen(navController, osintDefenseViewModel) }
             composable("osint_file") { OsintFileScreen(navController) }
             composable("usb_inspector") { UsbInspectorScreen(navController, usbInspectorViewModel) }
             composable("usb_hid_lab") { BadUsbScreen(navController, badUsbViewModel, usbInspectorViewModel) }
