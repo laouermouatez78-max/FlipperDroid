@@ -28,7 +28,10 @@ data class WifiNetwork(
     val lastSeen: String,
     val channel: Int = frequencyToChannel(frequency)
 ) {
+    val band: String get() = frequencyBand(frequency)
+
     companion object {
+        @Suppress("DEPRECATION")
         fun fromScanResult(result: ScanResult): WifiNetwork {
             val formatter = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
             return WifiNetwork(
@@ -47,6 +50,14 @@ data class WifiNetwork(
             frequency in 5170..5895 -> (frequency - 5000) / 5
             frequency in 5955..7115 -> (frequency - 5950) / 5
             else -> 0
+        }
+
+        fun frequencyBand(frequency: Int): String = when (frequency) {
+            in 2400..2500 -> "2.4 GHz"
+            in 4900..5924 -> "5 GHz"
+            in 5925..7125 -> "6 GHz"
+            in 57_000..71_000 -> "60 GHz"
+            else -> "Other"
         }
     }
 }
@@ -72,14 +83,9 @@ class WifiDeautherViewModel : ViewModel() {
     private val _wifiReady = MutableStateFlow(false)
     val wifiReady: StateFlow<Boolean> = _wifiReady
 
-    private val _status = MutableStateFlow("Wi-Fi audit not initialized")
+    private val _status = MutableStateFlow("Wi‑Fi analyzer not initialized")
     val status: StateFlow<String> = _status
 
-    /**
-     * WifiManager.startScan()/getScanResults() still require precise location on
-     * modern Android. NEARBY_WIFI_DEVICES is useful for other Wi-Fi APIs but is not
-     * a replacement for ACCESS_FINE_LOCATION for active scan results.
-     */
     fun requiredPermissions(): Array<String> = arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
 
     fun initialize(context: Context) {
@@ -107,16 +113,19 @@ class WifiDeautherViewModel : ViewModel() {
         _wifiReady.value = when {
             wifi == null -> false
             wifi.isWifiEnabled -> true
-            else -> runCatching { wifi.isScanAlwaysAvailable }.getOrDefault(false)
+            else -> runCatching {
+                @Suppress("DEPRECATION")
+                wifi.isScanAlwaysAvailable
+            }.getOrDefault(false)
         }
 
         if (!_isScanning.value) {
             _status.value = when {
-                wifi == null -> "Wi-Fi service unavailable on this device"
-                !_permissionsGranted.value -> "Grant precise location for Wi-Fi scan results"
-                !_locationEnabled.value -> "Turn Android Location on for Wi-Fi scanning"
-                !_wifiReady.value -> "Turn Wi-Fi on (or enable Wi-Fi scanning in Location services)"
-                else -> "Wi-Fi audit ready"
+                wifi == null -> "Wi‑Fi service unavailable on this device"
+                !_permissionsGranted.value -> "Grant precise location for Wi‑Fi scan results"
+                !_locationEnabled.value -> "Turn Android Location on for Wi‑Fi scanning"
+                !_wifiReady.value -> "Turn Wi‑Fi on (or enable Wi‑Fi scanning in Location services)"
+                else -> "Wi‑Fi analyzer ready"
             }
         }
     }
@@ -128,8 +137,7 @@ class WifiDeautherViewModel : ViewModel() {
                 manager.isLocationEnabled
             } else {
                 @Suppress("DEPRECATION")
-                manager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
-                    manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+                manager.isProviderEnabled(LocationManager.GPS_PROVIDER) || manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
             }
         }.getOrDefault(false)
     }
@@ -158,40 +166,36 @@ class WifiDeautherViewModel : ViewModel() {
     @SuppressLint("MissingPermission")
     fun startScan() {
         refreshPrerequisiteState()
-
         if (!_permissionsGranted.value) {
-            _status.value = "Precise location permission is required for Wi-Fi scan results"
+            _status.value = "Precise location permission is required for Wi‑Fi scan results"
             return
         }
         if (!_locationEnabled.value) {
             _status.value = "Android Location is off — enable it, then scan again"
             return
         }
-
         val wifi = wifiManager ?: run {
-            _status.value = "Wi-Fi service unavailable"
+            _status.value = "Wi‑Fi service unavailable"
             return
         }
         if (!_wifiReady.value) {
-            _status.value = "Wi-Fi scanning is unavailable while Wi-Fi is off"
+            _status.value = "Wi‑Fi scanning is unavailable while Wi‑Fi is off"
             return
         }
 
         _isScanning.value = true
-        _status.value = "Scanning nearby Wi-Fi…"
+        _status.value = "Scanning nearby Wi‑Fi…"
         try {
             @Suppress("DEPRECATION")
             val started = wifi.startScan()
-            if (!started) {
-                readScanResults("Fresh scan throttled by Android — showing cached results")
-            }
-        } catch (security: SecurityException) {
+            if (!started) readScanResults("Fresh scan throttled by Android — showing cached results")
+        } catch (_: SecurityException) {
             _permissionsGranted.value = false
             _isScanning.value = false
-            _status.value = "Wi-Fi scan blocked by Android permissions"
+            _status.value = "Wi‑Fi scan blocked by Android permissions"
         } catch (error: Exception) {
             _isScanning.value = false
-            _status.value = "Wi-Fi scan error: ${error.message?.take(120) ?: error.javaClass.simpleName}"
+            _status.value = "Wi‑Fi scan error: ${error.message?.take(120) ?: error.javaClass.simpleName}"
         }
     }
 
@@ -210,16 +214,12 @@ class WifiDeautherViewModel : ViewModel() {
                 .distinctBy { it.bssid }
                 .sortedWith(compareByDescending<WifiNetwork> { it.rssi }.thenBy { it.ssid })
             _networks.value = results
-            _status.value = if (results.isEmpty()) {
-                "$message · no access points returned"
-            } else {
-                "$message · ${results.size} network(s)"
-            }
-        } catch (security: SecurityException) {
+            _status.value = if (results.isEmpty()) "$message · no access points returned" else "$message · ${results.size} network(s)"
+        } catch (_: SecurityException) {
             _permissionsGranted.value = false
-            _status.value = "Unable to read Wi-Fi results: precise location permission denied"
+            _status.value = "Unable to read Wi‑Fi results: precise location permission denied"
         } catch (error: Exception) {
-            _status.value = "Unable to read Wi-Fi results: ${error.message?.take(120) ?: error.javaClass.simpleName}"
+            _status.value = "Unable to read Wi‑Fi results: ${error.message?.take(120) ?: error.javaClass.simpleName}"
         } finally {
             _isScanning.value = false
         }
@@ -234,8 +234,12 @@ class WifiDeautherViewModel : ViewModel() {
 
     fun getSecurityType(capabilities: String): SecurityType {
         val caps = capabilities.uppercase(Locale.ROOT)
+        val hasSae = "SAE" in caps || "WPA3" in caps
+        val hasPsk = "PSK" in caps || "WPA2" in caps || "RSN" in caps
         return when {
-            "WPA3" in caps || "SAE" in caps -> SecurityType.WPA3
+            "OWE" in caps -> SecurityType.OWE
+            hasSae && hasPsk -> SecurityType.WPA2_WPA3
+            hasSae -> SecurityType.WPA3
             "WPA2" in caps || "RSN" in caps -> SecurityType.WPA2
             "WPA" in caps -> SecurityType.WPA
             "WEP" in caps -> SecurityType.WEP
@@ -244,10 +248,12 @@ class WifiDeautherViewModel : ViewModel() {
     }
 
     fun securityFinding(network: WifiNetwork): String = when (getSecurityType(network.capabilities)) {
-        SecurityType.OPEN -> "Open network — traffic confidentiality relies on app-layer encryption"
+        SecurityType.OPEN -> "Open network — traffic confidentiality relies entirely on app-layer encryption"
+        SecurityType.OWE -> "Enhanced Open / OWE detected — encrypted without a shared password"
         SecurityType.WEP -> "Legacy WEP detected — replace with WPA2/WPA3"
         SecurityType.WPA -> "Legacy WPA detected — migrate to WPA2/WPA3"
         SecurityType.WPA2 -> "WPA2 detected"
+        SecurityType.WPA2_WPA3 -> "WPA2/WPA3 transition mode detected"
         SecurityType.WPA3 -> "WPA3 detected"
     }
 
@@ -261,4 +267,4 @@ class WifiDeautherViewModel : ViewModel() {
 }
 
 enum class NetworkStrength { EXCELLENT, GOOD, FAIR, POOR }
-enum class SecurityType { OPEN, WEP, WPA, WPA2, WPA3 }
+enum class SecurityType { OPEN, OWE, WEP, WPA, WPA2, WPA2_WPA3, WPA3 }
