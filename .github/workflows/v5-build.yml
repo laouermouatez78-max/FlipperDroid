@@ -25,13 +25,15 @@ jobs:
             .v5src/chunk01.b64 \
             .v5payload/part01.b64 \
             .v5payload/part02.b64 \
-            .v5payload/part03.b64 \
+            .v5payload/part03a.b64 \
+            .v5payload/part03b.b64 \
             .v5payload/part04.b64 \
             .v5payload/part05a.b64 \
             .v5payload/part05b.b64 \
             .v5payload/part06.b64 > /tmp/v5.b64
           base64 --decode /tmp/v5.b64 > /tmp/FlipperDroid-V5-SOURCE.zip
           echo "Archive SHA-256: $(sha256sum /tmp/FlipperDroid-V5-SOURCE.zip | cut -d' ' -f1)"
+          test "$(sha256sum /tmp/FlipperDroid-V5-SOURCE.zip | cut -d' ' -f1)" = "c5ecbe73274eec30032f9f6c357df6e9496575df40d05a66f93459e308554092"
           mkdir -p /tmp/v5src
           unzip -q /tmp/FlipperDroid-V5-SOURCE.zip -d /tmp/v5src
           test -f /tmp/v5src/FlipperDroid_V5/app/build.gradle.kts
