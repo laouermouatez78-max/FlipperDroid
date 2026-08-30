@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lan
 import androidx.compose.material.icons.filled.Nfc
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material.icons.filled.Wifi
@@ -42,7 +43,7 @@ fun V4AboutScreen(navController: NavController) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("About FlipperDroid V4") },
+                title = { Text("About FlipperDroid V5") },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -62,14 +63,14 @@ fun V4AboutScreen(navController: NavController) {
             item {
                 Icon(
                     Icons.Default.Android,
-                    contentDescription = "FlipperDroid V4",
+                    contentDescription = "FlipperDroid V5",
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
 
             item {
                 Text(
-                    "FlipperDroid V4",
+                    "FlipperDroid V5",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Black
                 )
@@ -77,7 +78,7 @@ fun V4AboutScreen(navController: NavController) {
 
             item {
                 Text(
-                    "Version 4.0.0",
+                    "Version 5.0.0",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -85,7 +86,7 @@ fun V4AboutScreen(navController: NavController) {
 
             item {
                 Text(
-                    "Android security and hardware toolkit for devices, tags and networks you own or are explicitly authorized to test.",
+                    "Android security, hardware and public-information analysis toolkit for authorized testing and local OSINT workflows.",
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center
                 )
@@ -97,8 +98,9 @@ fun V4AboutScreen(navController: NavController) {
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Column(Modifier.padding(16.dp)) {
-                        Text("V4 modules", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("V5 modules", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(8.dp))
+                        ListItem(headlineContent = { Text("OSINT Hub") }, leadingContent = { Icon(Icons.Default.Public, null) })
                         ListItem(headlineContent = { Text("NFC / RFID") }, leadingContent = { Icon(Icons.Default.Nfc, null) })
                         ListItem(headlineContent = { Text("BLE Scanner / Advertiser") }, leadingContent = { Icon(Icons.Default.Bluetooth, null) })
                         ListItem(headlineContent = { Text("Wi‑Fi Audit") }, leadingContent = { Icon(Icons.Default.Wifi, null) })
@@ -114,8 +116,8 @@ fun V4AboutScreen(navController: NavController) {
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     ListItem(
-                        headlineContent = { Text("Owner Mode") },
-                        supportingContent = { Text("Use active diagnostics only on systems you control or have permission to assess.") },
+                        headlineContent = { Text("Authorized / Public Mode") },
+                        supportingContent = { Text("Use active diagnostics only on authorized systems. Use OSINT features for public information and local analysis without accessing private accounts or credentials.") },
                         leadingContent = { Icon(Icons.Default.Security, null) }
                     )
                 }
@@ -124,7 +126,7 @@ fun V4AboutScreen(navController: NavController) {
             item {
                 ListItem(
                     headlineContent = { Text("Build channel") },
-                    supportingContent = { Text("FlipperDroid V4 · 4.0.0") },
+                    supportingContent = { Text("FlipperDroid V5 · 5.0.0") },
                     leadingContent = { Icon(Icons.Default.Info, null) }
                 )
             }
