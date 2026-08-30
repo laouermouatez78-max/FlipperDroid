@@ -31,14 +31,12 @@ fun BleAdvertiserScreen(navController: NavController, viewModel: BleAdvertiserVi
         if (permissionsGranted) viewModel.start()
     }
 
-    DisposableEffect(Unit) {
-        onDispose { viewModel.stop() }
-    }
+    DisposableEffect(Unit) { onDispose { viewModel.stop() } }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("BLE Test Beacon · V4") },
+                title = { Text("BLE Test Beacon · V5") },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -57,21 +55,13 @@ fun BleAdvertiserScreen(navController: NavController, viewModel: BleAdvertiserVi
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Surface(
-                        shape = MaterialTheme.shapes.medium,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                    ) {
-                        Icon(
-                            Icons.Default.Bluetooth,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(10.dp).size(28.dp)
-                        )
+                    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) {
+                        Icon(Icons.Default.Bluetooth, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(10.dp).size(28.dp))
                     }
                     Column(Modifier.weight(1f)) {
                         Text("One normal BLE advertisement", fontWeight = FontWeight.Bold)
                         Text(
-                            "Broadcast a FlipperDroid V4 test UUID so a second device you control can verify BLE discovery.",
+                            "Broadcast a FlipperDroid V5 test UUID so a second device you control can verify BLE discovery. The beacon auto-stops after 60 seconds.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -83,7 +73,7 @@ fun BleAdvertiserScreen(navController: NavController, viewModel: BleAdvertiserVi
                 value = name,
                 onValueChange = viewModel::updateName,
                 label = { Text("Temporary BLE device name") },
-                supportingText = { Text("V4 restores your original Bluetooth name when the beacon stops.") },
+                supportingText = { Text("V5 restores the original Bluetooth name when the beacon stops.") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !active
@@ -92,50 +82,34 @@ fun BleAdvertiserScreen(navController: NavController, viewModel: BleAdvertiserVi
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AssistChip(
                     onClick = {},
-                    leadingIcon = if (permissionsGranted) {
-                        { Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                    } else null,
+                    leadingIcon = if (permissionsGranted) { { Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp)) } } else null,
                     label = { Text(if (permissionsGranted) "Permissions OK" else "Permissions required") }
                 )
-                AssistChip(
-                    onClick = {},
-                    label = { Text(if (viewModel.canAdvertise()) "Advertiser supported" else "Unsupported") }
-                )
+                AssistChip(onClick = {}, label = { Text(if (viewModel.canAdvertise()) "Advertiser supported" else "Unsupported") })
             }
 
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surfaceVariant
-            ) {
+            Surface(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant) {
                 Text(status, modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium)
             }
 
             if (!permissionsGranted) {
-                OutlinedButton(
-                    onClick = { launcher.launch(viewModel.requiredPermissions()) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                OutlinedButton(onClick = { launcher.launch(viewModel.requiredPermissions()) }, modifier = Modifier.fillMaxWidth()) {
                     Text("Grant Bluetooth permissions")
                 }
             }
 
             Button(
                 onClick = {
-                    if (active) {
-                        viewModel.stop()
-                    } else if (permissionsGranted) {
-                        viewModel.start()
-                    } else {
-                        launcher.launch(viewModel.requiredPermissions())
-                    }
+                    if (active) viewModel.stop()
+                    else if (permissionsGranted) viewModel.start()
+                    else launcher.launch(viewModel.requiredPermissions())
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = active || viewModel.canAdvertise()
             ) {
                 Icon(if (active) Icons.Default.Stop else Icons.Default.PlayArrow, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text(if (active) "Stop beacon" else "Start test beacon")
+                Text(if (active) "Stop beacon" else "Start 60-second test beacon")
             }
 
             Card(
@@ -144,9 +118,10 @@ fun BleAdvertiserScreen(navController: NavController, viewModel: BleAdvertiserVi
             ) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("How to test", fontWeight = FontWeight.Bold)
-                    Text("1. Start the beacon on this phone.")
+                    Text("1. Start the V5 beacon on this phone.")
                     Text("2. Open BLE Explorer on a second phone you control.")
-                    Text("3. Scan and look for the temporary device name / V4 service advertisement.")
+                    Text("3. Scan for the temporary name / V5 service advertisement.")
+                    Text("4. The source phone stops advertising automatically after one minute.")
                 }
             }
         }
