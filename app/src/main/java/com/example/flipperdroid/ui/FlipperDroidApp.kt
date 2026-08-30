@@ -33,6 +33,7 @@ private val mainDestinations = listOf(
     MainDestination("more", "Plus", Icons.Default.MoreHoriz)
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FlipperDroidApp(appViewModel: AppViewModel = viewModel()) {
     val viewModel = appViewModel
