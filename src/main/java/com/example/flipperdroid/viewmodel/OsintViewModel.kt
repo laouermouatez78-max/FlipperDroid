@@ -217,10 +217,10 @@ class OsintViewModel : ViewModel() {
                     val host = uri.host.lowercase(Locale.ROOT)
                     val resolved = InetAddress.getAllByName(host).distinctBy { it.hostAddress }
                     if (resolved.isEmpty()) error("Host did not resolve")
-                    if (resolved.all { isPrivateOrSpecial(it) }) {
+                    if (resolved.any { isPrivateOrSpecial(it) }) {
                         return@runCatching OsintResult(
                             "Public Web Surface · $host",
-                            "The target resolves only to local/private/special-use addresses. Active web inspection is limited to public OSINT targets.",
+                            "The target resolves to at least one local/private/special-use address. Active web inspection is limited to public-only OSINT targets to prevent internal-network access and DNS rebinding.",
                             true
                         )
                     }
