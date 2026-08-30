@@ -1,0 +1,157 @@
+package com.example.flipperdroid.view
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Router
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
+import com.example.flipperdroid.viewmodel.OsintViewModel
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun OsintScreen(navController: NavController, viewModel: OsintViewModel) {
+    val results by viewModel.results.collectAsState()
+    var domain by remember { mutableStateOf("") }
+    var ip by remember { mutableStateOf("") }
+    var url by remember { mutableStateOf("") }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("OSINT Hub · V5") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.navigateUp() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = viewModel::clearResults, enabled = results.isNotEmpty()) {
+                        Icon(Icons.Default.Clear, contentDescription = "Clear results")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Icon(Icons.Default.Public, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Text("Public-information analysis", fontWeight = FontWeight.Bold)
+                        }
+                        Text(
+                            "V5 starts with local OSINT helpers for domains, IP addresses and URLs. These tools parse public identifiers without accessing private accounts or credentials.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+
+            item {
+                OsintInputCard(
+                    title = "Domain Inspector",
+                    subtitle = "Parse hostname structure, suffix and IDN form.",
+                    icon = Icons.Default.Language,
+                    value = domain,
+                    placeholder = "example.org",
+                    onValueChange = { domain = it.take(253) },
+                    onAnalyze = { viewModel.inspectDomain(domain) }
+                )
+            }
+
+            item {
+                OsintInputCard(
+                    title = "IP / Host Inspector",
+                    subtitle = "Classify IPv4/IPv6 scope: public, private, loopback, link-local or multicast.",
+                    icon = Icons.Default.Router,
+                    value = ip,
+                    placeholder = "192.168.1.1",
+                    onValueChange = { ip = it.take(64) },
+                    onAnalyze = { viewModel.inspectIp(ip) }
+                )
+            }
+
+            item {
+                OsintInputCard(
+                    title = "URL Inspector",
+                    subtitle = "Break down HTTP/HTTPS scheme, host, port, path and risky embedded user-info.",
+                    icon = Icons.Default.Link,
+                    value = url,
+                    placeholder = "https://example.org/path",
+                    onValueChange = { url = it.take(500) },
+                    onAnalyze = { viewModel.inspectUrl(url) }
+                )
+            }
+
+            if (results.isNotEmpty()) {
+                item {
+                    Text("RESULTS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            items(results) { result ->
+                val container = if (result.isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant
+                val content = if (result.isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.elevatedCardColors(containerColor = container)
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(result.title, fontWeight = FontWeight.Bold, color = content)
+                        Text(result.output, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, color = content)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OsintInputCard(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    value: String,
+    placeholder: String,
+    onValueChange: (String) -> Unit,
+    onAnalyze: () -> Unit
+) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Column {
+                    Text(title, fontWeight = FontWeight.Bold)
+                    Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                placeholder = { Text(placeholder) }
+            )
+            Button(onClick = onAnalyze, enabled = value.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
+                Text("Analyze")
+            }
+        }
+    }
+}
