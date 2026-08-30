@@ -7,12 +7,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PersonSearch
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Router
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -33,6 +35,7 @@ fun OsintScreen(navController: NavController, viewModel: OsintViewModel) {
     var handle by remember { mutableStateOf("") }
     var publicEmail by remember { mutableStateOf("") }
     var domain by remember { mutableStateOf("") }
+    var liveTarget by remember { mutableStateOf("") }
     var ip by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("") }
 
@@ -66,7 +69,7 @@ fun OsintScreen(navController: NavController, viewModel: OsintViewModel) {
                             Text("Public-information analysis", fontWeight = FontWeight.Bold)
                         }
                         Text(
-                            "Analyze public names, pseudonyms, domains, IP addresses and URLs. Identity tools generate candidate public-profile links and search queries without claiming that accounts belong to the same person.",
+                            "Analyze public names, pseudonyms, domains, DNS, TLS certificates, HTTP security headers, IP addresses and URLs. Active checks are explicit, low-volume and limited to the target you enter.",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -139,7 +142,7 @@ fun OsintScreen(navController: NavController, viewModel: OsintViewModel) {
             item {
                 OsintInputCard(
                     title = "Domain Inspector",
-                    subtitle = "Parse hostname structure, suffix and IDN form.",
+                    subtitle = "Parse hostname structure, suffix and IDN form, then open passive public sources such as RDAP, CT logs and Wayback.",
                     icon = Icons.Default.Language,
                     value = domain,
                     placeholder = "example.org",
@@ -149,12 +152,61 @@ fun OsintScreen(navController: NavController, viewModel: OsintViewModel) {
             }
 
             item {
+                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Icon(Icons.Default.Dns, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Column {
+                                Text("Live Public Host / Web Surface", fontWeight = FontWeight.Bold)
+                                Text(
+                                    "Resolve A/AAAA + reverse names, or inspect one public HTTP(S) endpoint for status, TLS certificate and security headers.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        OutlinedTextField(
+                            value = liveTarget,
+                            onValueChange = { liveTarget = it.take(500) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            leadingIcon = { Icon(Icons.Default.Security, contentDescription = null) },
+                            placeholder = { Text("https://example.org") }
+                        )
+                        Button(
+                            onClick = { viewModel.resolveDnsLive(liveTarget) },
+                            enabled = liveTarget.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Dns, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Resolve DNS + reverse")
+                        }
+                        OutlinedButton(
+                            onClick = { viewModel.inspectWebSurface(liveTarget) },
+                            enabled = liveTarget.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Security, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Inspect HTTP + TLS surface")
+                        }
+                        Text(
+                            "Web/TLS inspection refuses targets that resolve only to local, private or special-use addresses. Redirects are reported but not followed automatically.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            item {
                 OsintInputCard(
                     title = "IP / Host Inspector",
-                    subtitle = "Classify IPv4/IPv6 scope: public, private, loopback, link-local or multicast.",
+                    subtitle = "Classify IPv4/IPv6 scope and attempt a reverse/canonical hostname lookup.",
                     icon = Icons.Default.Router,
                     value = ip,
-                    placeholder = "192.168.1.1",
+                    placeholder = "8.8.8.8",
                     onValueChange = { ip = it.take(64) },
                     onAnalyze = { viewModel.inspectIp(ip) }
                 )
@@ -163,7 +215,7 @@ fun OsintScreen(navController: NavController, viewModel: OsintViewModel) {
             item {
                 OsintInputCard(
                     title = "URL Inspector",
-                    subtitle = "Break down HTTP/HTTPS scheme, host, port, path and risky embedded user-info.",
+                    subtitle = "Break down HTTP/HTTPS scheme, host, port, path and query parameter names, with passive discovery links.",
                     icon = Icons.Default.Link,
                     value = url,
                     placeholder = "https://example.org/path",
@@ -190,7 +242,7 @@ fun OsintScreen(navController: NavController, viewModel: OsintViewModel) {
                         Text(result.output, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, color = content)
                         if (result.links.isNotEmpty()) {
                             HorizontalDivider()
-                            Text("PUBLIC LINKS", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            Text("PUBLIC / PASSIVE LINKS", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                             result.links.forEach { link ->
                                 OutlinedButton(
                                     onClick = { runCatching { uriHandler.openUri(link.url) } },
