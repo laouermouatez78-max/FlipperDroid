@@ -1,14 +1,21 @@
 package com.example.flipperdroid.viewmodel
 
 import androidx.lifecycle.ViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.net.HttpURLConnection
 import java.net.IDN
 import java.net.InetAddress
 import java.net.URI
 import java.net.URLEncoder
+import java.net.URL
 import java.text.Normalizer
+import java.text.SimpleDateFormat
 import java.util.Locale
+import javax.net.ssl.HttpsURLConnection
+import java.security.cert.X509Certificate
 
 
 data class OsintLink(
@@ -85,6 +92,7 @@ class OsintViewModel : ViewModel() {
             publicQueries += "site:github.com \"$alias\""
             publicQueries += "site:reddit.com \"$alias\""
             publicQueries += "site:youtube.com \"$alias\""
+            publicQueries += "site:medium.com \"$alias\""
         }
 
         val searchSeed = when {
@@ -100,6 +108,13 @@ class OsintViewModel : ViewModel() {
         }
 
         val emailInfo = inspectPublicEmailLocally(email)
+        if (email.contains('@')) {
+            val domain = email.substringAfterLast('@').lowercase(Locale.ROOT)
+            if (isHostnameLike(domain)) {
+                links += OsintLink("Email domain RDAP", "https://rdap.org/domain/${encodePath(domain)}")
+            }
+        }
+
         val output = buildString {
             appendLine("Display name: ${displayName.ifBlank { "—" }}")
             appendLine("Handle: ${alias.ifBlank { "—" }}")
@@ -107,7 +122,7 @@ class OsintViewModel : ViewModel() {
             appendLine("Candidate handle variants: ${variants.take(12).joinToString(", ").ifBlank { "—" }}")
             appendLine()
             appendLine("Public-search query pack:")
-            publicQueries.take(8).forEach { appendLine("• $it") }
+            publicQueries.take(10).forEach { appendLine("• $it") }
             if (publicQueries.isEmpty()) appendLine("• —")
             if (emailInfo.isNotBlank()) {
                 appendLine()
@@ -121,39 +136,163 @@ class OsintViewModel : ViewModel() {
         addResult(
             title = "Public Identity · ${displayName.ifBlank { alias.ifBlank { "identifier" } }}",
             output = output,
-            links = links.distinctBy { it.url }.take(15)
+            links = links.distinctBy { it.url }.take(18)
         )
     }
 
     fun inspectDomain(value: String) {
-        val raw = value.trim().lowercase()
-        if (raw.isBlank() || raw.length > 253 || raw.any { it.isWhitespace() }) {
-            addResult("Domain Inspector", "Enter a valid domain name.", true)
-            return
-        }
-
-        val host = runCatching {
-            val uri = URI(if ("://" in raw) raw else "https://$raw")
-            uri.host
-        }.getOrNull()?.trimEnd('.')
-
-        if (host.isNullOrBlank()) {
-            addResult("Domain Inspector", "Unable to parse this domain.", true)
+        val host = extractHost(value)
+        if (host == null) {
+            addResult("Domain Inspector", "Enter a valid public hostname or domain.", true)
             return
         }
 
         val labels = host.split('.').filter { it.isNotBlank() }
         val tld = labels.lastOrNull().orEmpty()
         val registrableHint = if (labels.size >= 2) labels.takeLast(2).joinToString(".") else host
+        val ascii = runCatching { IDN.toASCII(host) }.getOrDefault(host)
+        val links = domainPassiveLinks(host)
 
         val output = buildString {
             appendLine("Host: $host")
             appendLine("Labels: ${labels.size}")
             appendLine("TLD / suffix hint: .$tld")
             appendLine("Registrable-domain hint: $registrableHint")
-            appendLine("Internationalized form: ${runCatching { IDN.toASCII(host) }.getOrDefault(host)}")
+            appendLine("ASCII / IDN form: $ascii")
+            appendLine("Punycode present: ${ascii.contains("xn--")}")
+            appendLine()
+            appendLine("Use Live DNS / Web Surface below for network-backed public checks.")
         }
-        addResult("Domain Inspector · $host", output)
+        addResult("Domain Inspector · $host", output, links = links)
+    }
+
+    fun resolveDnsLive(value: String) {
+        val host = extractHost(value)
+        if (host == null) {
+            addResult("Live DNS", "Enter a valid hostname or URL.", true)
+            return
+        }
+
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val addresses = InetAddress.getAllByName(host).distinctBy { it.hostAddress }
+                    if (addresses.isEmpty()) error("No A/AAAA resolution returned")
+                    val output = buildString {
+                        appendLine("Host: $host")
+                        appendLine("Resolved addresses: ${addresses.size}")
+                        addresses.take(12).forEachIndexed { index, address ->
+                            appendLine("${index + 1}. ${address.hostAddress} · ${addressScope(address)}")
+                            val canonical = runCatching { address.canonicalHostName }.getOrNull()
+                            if (!canonical.isNullOrBlank() && canonical != address.hostAddress && canonical != host) {
+                                appendLine("   reverse/canonical: $canonical")
+                            }
+                        }
+                    }
+                    OsintResult("Live DNS · $host", output.trim(), links = domainPassiveLinks(host))
+                }.getOrElse { error ->
+                    OsintResult("Live DNS · $host", "DNS lookup failed: ${friendlyError(error)}", true)
+                }
+            }
+            appendResult(result)
+        }
+    }
+
+    fun inspectWebSurface(value: String) {
+        val uri = parseHttpUri(value)
+        if (uri == null) {
+            addResult("Public Web Surface", "Enter a valid HTTP or HTTPS URL.", true)
+            return
+        }
+        if (!uri.userInfo.isNullOrBlank()) {
+            addResult("Public Web Surface", "URLs containing embedded user-info or credentials are not accepted.", true)
+            return
+        }
+
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val host = uri.host.lowercase(Locale.ROOT)
+                    val resolved = InetAddress.getAllByName(host).distinctBy { it.hostAddress }
+                    if (resolved.isEmpty()) error("Host did not resolve")
+                    if (resolved.all { isPrivateOrSpecial(it) }) {
+                        return@runCatching OsintResult(
+                            "Public Web Surface · $host",
+                            "The target resolves only to local/private/special-use addresses. Active web inspection is limited to public OSINT targets.",
+                            true
+                        )
+                    }
+
+                    val url = URL(uri.toASCIIString())
+                    val connection = (url.openConnection() as HttpURLConnection).apply {
+                        requestMethod = "HEAD"
+                        connectTimeout = 6000
+                        readTimeout = 6000
+                        instanceFollowRedirects = false
+                        setRequestProperty("User-Agent", "FlipperDroid-V5-OSINT/5.0")
+                        setRequestProperty("Accept", "*/*")
+                    }
+
+                    try {
+                        val status = connection.responseCode
+                        val location = connection.getHeaderField("Location")
+                        val server = connection.getHeaderField("Server")
+                        val contentType = connection.getHeaderField("Content-Type")
+                        val securityHeaders = listOf(
+                            "Strict-Transport-Security",
+                            "Content-Security-Policy",
+                            "X-Content-Type-Options",
+                            "Referrer-Policy",
+                            "Permissions-Policy",
+                            "Cross-Origin-Opener-Policy",
+                            "Cross-Origin-Resource-Policy"
+                        )
+                        val present = securityHeaders.filter { !connection.getHeaderField(it).isNullOrBlank() }
+                        val missing = securityHeaders - present.toSet()
+
+                        val tlsSummary = if (connection is HttpsURLConnection) {
+                            buildTlsSummary(connection)
+                        } else {
+                            "TLS: not used (HTTP)"
+                        }
+
+                        val output = buildString {
+                            appendLine("URL: ${uri.toASCIIString()}")
+                            appendLine("HTTP status: $status")
+                            appendLine("Resolved: ${resolved.take(6).joinToString(", ") { it.hostAddress ?: "?" }}")
+                            appendLine("Server header: ${server ?: "not disclosed"}")
+                            appendLine("Content-Type: ${contentType ?: "not disclosed"}")
+                            appendLine("Redirect location: ${location ?: "none"}")
+                            appendLine()
+                            appendLine("Security headers present (${present.size}/${securityHeaders.size}):")
+                            if (present.isEmpty()) appendLine("• none observed in HEAD response") else present.forEach { appendLine("• $it") }
+                            if (missing.isNotEmpty()) {
+                                appendLine("Missing/not observed:")
+                                missing.forEach { appendLine("• $it") }
+                            }
+                            appendLine()
+                            append(tlsSummary)
+                        }
+
+                        OsintResult(
+                            "Public Web Surface · $host",
+                            output.trim(),
+                            links = webDiscoveryLinks(uri)
+                        )
+                    } finally {
+                        connection.disconnect()
+                    }
+                }.getOrElse { error ->
+                    OsintResult(
+                        "Public Web Surface · ${uri.host}",
+                        "Web/TLS inspection failed: ${friendlyError(error)}",
+                        true,
+                        links = webDiscoveryLinks(uri)
+                    )
+                }
+            }
+            appendResult(result)
+        }
     }
 
     fun inspectIp(value: String) {
@@ -169,39 +308,23 @@ class OsintViewModel : ViewModel() {
             return
         }
 
-        val scope = when {
-            address.isLoopbackAddress -> "loopback"
-            address.isLinkLocalAddress -> "link-local"
-            address.isSiteLocalAddress -> "private/site-local"
-            address.isMulticastAddress -> "multicast"
-            address.isAnyLocalAddress -> "unspecified/local"
-            else -> "public/global or provider-routed"
-        }
-
         val output = buildString {
             appendLine("Address: ${address.hostAddress}")
-            appendLine("Family: ${if (candidate.contains(':')) "IPv6" else "IPv4"}")
-            appendLine("Scope: $scope")
+            appendLine("Family: ${if (address.address.size == 16) "IPv6" else "IPv4"}")
+            appendLine("Scope: ${addressScope(address)}")
             appendLine("Loopback: ${address.isLoopbackAddress}")
             appendLine("Link-local: ${address.isLinkLocalAddress}")
-            appendLine("Private/site-local: ${address.isSiteLocalAddress}")
+            appendLine("Private/site-local: ${address.isSiteLocalAddress || isUniqueLocalIpv6(address)}")
             appendLine("Multicast: ${address.isMulticastAddress}")
+            val reverse = runCatching { address.canonicalHostName }.getOrNull()
+            if (!reverse.isNullOrBlank() && reverse != address.hostAddress) appendLine("Reverse/canonical: $reverse")
         }
         addResult("IP Inspector · ${address.hostAddress}", output)
     }
 
     fun inspectUrl(value: String) {
-        val raw = value.trim()
-        if (raw.isBlank()) {
-            addResult("URL Inspector", "Enter a URL.", true)
-            return
-        }
-
-        val uri = runCatching {
-            URI(if ("://" in raw) raw else "https://$raw")
-        }.getOrNull()
-
-        if (uri == null || uri.host.isNullOrBlank() || uri.scheme !in setOf("http", "https")) {
+        val uri = parseHttpUri(value)
+        if (uri == null) {
             addResult("URL Inspector", "Enter a valid HTTP or HTTPS URL.", true)
             return
         }
@@ -216,12 +339,68 @@ class OsintViewModel : ViewModel() {
             appendLine("Fragment present: ${!uri.rawFragment.isNullOrBlank()}")
             appendLine("HTTPS: ${uri.scheme == "https"}")
             if (!uri.userInfo.isNullOrBlank()) appendLine("Warning: URL contains user-info credentials")
+            if (!uri.rawQuery.isNullOrBlank()) {
+                appendLine("Query parameter names: ${queryParameterNames(uri.rawQuery).joinToString(", ").ifBlank { "—" }}")
+            }
         }
-        addResult("URL Inspector · ${uri.host}", output)
+        addResult("URL Inspector · ${uri.host}", output, links = webDiscoveryLinks(uri))
     }
 
     fun clearResults() {
         _results.value = emptyList()
+    }
+
+    private fun buildTlsSummary(connection: HttpsURLConnection): String {
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val cert = runCatching {
+            connection.serverCertificates.firstOrNull() as? X509Certificate
+        }.getOrNull()
+
+        if (cert == null) return "TLS: HTTPS connection established, certificate details unavailable."
+
+        val sanDns = runCatching {
+            cert.subjectAlternativeNames
+                ?.mapNotNull { entry ->
+                    val type = entry.getOrNull(0) as? Int
+                    val value = entry.getOrNull(1)?.toString()
+                    if (type == 2 && !value.isNullOrBlank()) value else null
+                }
+                ?.distinct()
+                ?.take(12)
+                .orEmpty()
+        }.getOrDefault(emptyList())
+
+        return buildString {
+            appendLine("TLS certificate:")
+            appendLine("• subject: ${cert.subjectX500Principal.name}")
+            appendLine("• issuer: ${cert.issuerX500Principal.name}")
+            appendLine("• valid from: ${dateFormat.format(cert.notBefore)}")
+            appendLine("• valid until: ${dateFormat.format(cert.notAfter)}")
+            appendLine("• serial: ${cert.serialNumber.toString(16)}")
+            appendLine("• signature algorithm: ${cert.sigAlgName}")
+            if (sanDns.isNotEmpty()) appendLine("• DNS SANs: ${sanDns.joinToString(", ")}")
+        }
+    }
+
+    private fun domainPassiveLinks(host: String): List<OsintLink> {
+        val encodedHost = encode(host)
+        return listOf(
+            OsintLink("RDAP registration data", "https://rdap.org/domain/${encodePath(host)}"),
+            OsintLink("Certificate Transparency", "https://crt.sh/?q=%25.$encodedHost"),
+            OsintLink("Wayback Machine", "https://web.archive.org/web/*/https://$host/*"),
+            OsintLink("urlscan.io public results", "https://urlscan.io/domain/$host"),
+            OsintLink("Google site index", "https://www.google.com/search?q=${encode("site:$host")}")
+        )
+    }
+
+    private fun webDiscoveryLinks(uri: URI): List<OsintLink> {
+        val host = uri.host.lowercase(Locale.ROOT)
+        val origin = "${uri.scheme}://$host${if (uri.port == -1) "" else ":${uri.port}"}"
+        return (domainPassiveLinks(host) + listOf(
+            OsintLink("security.txt", "$origin/.well-known/security.txt"),
+            OsintLink("robots.txt", "$origin/robots.txt"),
+            OsintLink("sitemap.xml", "$origin/sitemap.xml")
+        )).distinctBy { it.url }
     }
 
     private fun inspectPublicEmailLocally(value: String): String {
@@ -242,6 +421,61 @@ class OsintViewModel : ViewModel() {
         }
     }
 
+    private fun extractHost(value: String): String? {
+        val raw = value.trim()
+        if (raw.isBlank() || raw.length > 500 || raw.any { it == '\n' || it == '\r' }) return null
+        val host = runCatching {
+            URI(if ("://" in raw) raw else "https://$raw").host
+        }.getOrNull()?.trimEnd('.')?.lowercase(Locale.ROOT) ?: return null
+        if (!isHostnameLike(host)) return null
+        return host
+    }
+
+    private fun parseHttpUri(value: String): URI? {
+        val raw = value.trim()
+        if (raw.isBlank() || raw.length > 1000 || raw.any { it == '\n' || it == '\r' }) return null
+        val uri = runCatching { URI(if ("://" in raw) raw else "https://$raw") }.getOrNull() ?: return null
+        if (uri.scheme !in setOf("http", "https") || uri.host.isNullOrBlank()) return null
+        return uri
+    }
+
+    private fun isHostnameLike(host: String): Boolean {
+        if (host.length !in 1..253 || host.any { it.isWhitespace() }) return false
+        val ascii = runCatching { IDN.toASCII(host) }.getOrNull() ?: return false
+        return ascii.split('.').all { label ->
+            label.isNotBlank() && label.length <= 63 &&
+                Regex("^[A-Za-z0-9-]+$").matches(label) &&
+                !label.startsWith('-') && !label.endsWith('-')
+        }
+    }
+
+    private fun addressScope(address: InetAddress): String = when {
+        address.isLoopbackAddress -> "loopback"
+        address.isLinkLocalAddress -> "link-local"
+        address.isSiteLocalAddress || isUniqueLocalIpv6(address) -> "private/site-local"
+        address.isMulticastAddress -> "multicast"
+        address.isAnyLocalAddress -> "unspecified/local"
+        else -> "public/global or provider-routed"
+    }
+
+    private fun isPrivateOrSpecial(address: InetAddress): Boolean =
+        address.isLoopbackAddress ||
+            address.isLinkLocalAddress ||
+            address.isSiteLocalAddress ||
+            address.isMulticastAddress ||
+            address.isAnyLocalAddress ||
+            isUniqueLocalIpv6(address)
+
+    private fun isUniqueLocalIpv6(address: InetAddress): Boolean {
+        val bytes = address.address
+        return bytes.size == 16 && ((bytes[0].toInt() and 0xFE) == 0xFC)
+    }
+
+    private fun queryParameterNames(rawQuery: String): List<String> =
+        rawQuery.split('&').mapNotNull { pair ->
+            pair.substringBefore('=').takeIf { it.isNotBlank() }
+        }.distinct().take(20)
+
     private fun slug(value: String): String {
         if (value.isBlank()) return ""
         val decomposed = Normalizer.normalize(value, Normalizer.Form.NFD)
@@ -252,7 +486,11 @@ class OsintViewModel : ViewModel() {
             .take(40)
     }
 
+    private fun friendlyError(error: Throwable): String =
+        error.message?.take(180)?.ifBlank { error.javaClass.simpleName } ?: error.javaClass.simpleName
+
     private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
+    private fun encodePath(value: String): String = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
     private fun addResult(
         title: String,
@@ -260,7 +498,11 @@ class OsintViewModel : ViewModel() {
         isError: Boolean = false,
         links: List<OsintLink> = emptyList()
     ) {
-        _results.value = (_results.value + OsintResult(title, output.trim(), isError, links)).takeLast(20)
+        appendResult(OsintResult(title, output.trim(), isError, links))
+    }
+
+    private fun appendResult(result: OsintResult) {
+        _results.value = (_results.value + result).takeLast(24)
     }
 
     private fun looksLikeIp(value: String): Boolean =
