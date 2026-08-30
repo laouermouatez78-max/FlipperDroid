@@ -25,6 +25,9 @@ class EmvCardEmulationViewModel : ViewModel() {
     private val _readerStatus = MutableStateFlow("Tap another FlipperDroid HCE phone, then run the APDU test")
     val readerStatus: StateFlow<String> = _readerStatus
 
+    private val _isReaderBusy = MutableStateFlow(false)
+    val isReaderBusy: StateFlow<Boolean> = _isReaderBusy
+
     val profiles = listOf("FlipperDroid HCE test card")
 
     fun selectProfile(profile: String) {
@@ -38,6 +41,10 @@ class EmvCardEmulationViewModel : ViewModel() {
     }
 
     fun runReaderTest(tag: Tag?) {
+        if (_isReaderBusy.value) {
+            _readerStatus.value = "An APDU exchange is already running"
+            return
+        }
         if (tag == null) {
             _readerStatus.value = "No NFC tag/device captured yet"
             return
@@ -50,6 +57,7 @@ class EmvCardEmulationViewModel : ViewModel() {
         }
 
         viewModelScope.launch(Dispatchers.IO) {
+            _isReaderBusy.value = true
             _readerStatus.value = "Running real APDU exchange…"
             try {
                 isoDep.timeout = 3500
@@ -68,7 +76,7 @@ class EmvCardEmulationViewModel : ViewModel() {
                 ApduLabState.append("READER RX ${pingResponse.toHex()}")
                 require(pingResponse.endsWith9000()) { "PING failed" }
 
-                val echoData = "HELLO-V4".toByteArray(Charsets.US_ASCII)
+                val echoData = "HELLO-V5".toByteArray(Charsets.US_ASCII)
                 val echo = byteArrayOf(0x80.toByte(), 0x20, 0x00, 0x00, echoData.size.toByte()) + echoData
                 ApduLabState.append("READER TX ${echo.toHex()}")
                 val echoResponse = isoDep.transceive(echo)
@@ -76,22 +84,24 @@ class EmvCardEmulationViewModel : ViewModel() {
                 require(echoResponse.endsWith9000()) { "ECHO failed" }
 
                 val returned = echoResponse.copyOfRange(0, echoResponse.size - 2).toString(Charsets.US_ASCII)
-                _readerStatus.value = if (returned == "HELLO-V4") {
-                    "REAL APDU TEST PASSED · SELECT + PING + ECHO"
+                _readerStatus.value = if (returned == "HELLO-V5") {
+                    "REAL APDU TEST PASSED · SELECT + PING + ECHO · V5"
                 } else {
                     "APDU link worked, but ECHO payload differed"
                 }
             } catch (error: Exception) {
-                _readerStatus.value = "APDU test failed: ${error.message ?: error.javaClass.simpleName}"
-                ApduLabState.append("READER error · ${error.message ?: error.javaClass.simpleName}")
+                val message = error.message?.take(160) ?: error.javaClass.simpleName
+                _readerStatus.value = "APDU test failed: $message"
+                ApduLabState.append("READER error · $message")
             } finally {
                 runCatching { isoDep.close() }
+                _isReaderBusy.value = false
             }
         }
     }
 
     fun clearTranscript() {
-        ApduLabState.clear()
+        if (!_isReaderBusy.value) ApduLabState.clear()
     }
 
     private fun ByteArray.endsWith9000(): Boolean =
