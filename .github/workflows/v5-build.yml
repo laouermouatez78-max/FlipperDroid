@@ -26,7 +26,12 @@ jobs:
             .v5payload/part01.b64 \
             .v5payload/part02.b64 \
             .v5payload/part03a.b64 \
-            .v5payload/part03b.b64 \
+            .v5payload/part03b0.b64 \
+            .v5payload/part03b1.b64 \
+            .v5payload/part03b2.b64 \
+            .v5payload/part03b3.b64 \
+            .v5payload/part03b4.b64 \
+            .v5payload/part03b5.b64 \
             .v5payload/part04.b64 \
             .v5payload/part05a.b64 \
             .v5payload/part05b.b64 \
