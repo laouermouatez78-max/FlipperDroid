@@ -13,9 +13,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.FilePresent
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lan
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.ManageSearch
 import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material.icons.filled.PersonSearch
 import androidx.compose.material.icons.filled.Public
@@ -55,37 +58,19 @@ fun V4AboutScreen(navController: NavController) {
         }
     ) { paddingValues ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp),
+            modifier = Modifier.fillMaxSize().padding(paddingValues).padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                Icon(
-                    Icons.Default.Android,
-                    contentDescription = "FlipperDroid V5",
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                Icon(Icons.Default.Android, contentDescription = "FlipperDroid V5", tint = MaterialTheme.colorScheme.primary)
             }
-
             item {
-                Text(
-                    "FlipperDroid V5",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Black
-                )
+                Text("FlipperDroid V5", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
             }
-
             item {
-                Text(
-                    "Version 5.0.0",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                Text("Version 5.0.0", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
             }
-
             item {
                 Text(
                     "Android security, hardware and public-information analysis toolkit for authorized testing and public OSINT workflows.",
@@ -95,10 +80,7 @@ fun V4AboutScreen(navController: NavController) {
             }
 
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
                     Column(Modifier.padding(16.dp)) {
                         Text("V5 OSINT", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(8.dp))
@@ -127,10 +109,60 @@ fun V4AboutScreen(navController: NavController) {
             }
 
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("Advanced OSINT", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
+                        ListItem(
+                            headlineContent = { Text("DNS Record Intelligence") },
+                            supportingContent = { Text("A, AAAA, MX, NS, TXT and CAA through explicit public DNS-over-HTTPS queries.") },
+                            leadingContent = { Icon(Icons.Default.Dns, null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("RDAP Registry Intelligence") },
+                            supportingContent = { Text("Public domain and IP allocation/registration metadata.") },
+                            leadingContent = { Icon(Icons.Default.ManageSearch, null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Local artifact analysis") },
+                            supportingContent = { Text("Typosquatting candidates, IOC extraction, email-header analysis and text fingerprints.") },
+                            leadingContent = { Icon(Icons.Default.ManageSearch, null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Report export") },
+                            supportingContent = { Text("Copy or share the assembled advanced OSINT findings as text.") },
+                            leadingContent = { Icon(Icons.Default.Info, null) }
+                        )
+                    }
+                }
+            }
+
+            item {
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("File Intelligence", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
+                        ListItem(
+                            headlineContent = { Text("Hashes & signatures") },
+                            supportingContent = { Text("SHA-256/SHA-1, file magic, MIME/extension mismatch and entropy hints.") },
+                            leadingContent = { Icon(Icons.Default.FilePresent, null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("Image / EXIF") },
+                            supportingContent = { Text("Camera, software and timestamp metadata plus GPS/serial presence warnings without automatic coordinate disclosure.") },
+                            leadingContent = { Icon(Icons.Default.FilePresent, null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("PDF / Office / package triage") },
+                            supportingContent = { Text("PDF metadata markers, OOXML creator/application properties, VBA marker and APK/ZIP package hints.") },
+                            leadingContent = { Icon(Icons.Default.FilePresent, null) }
+                        )
+                    }
+                }
+            }
+
+            item {
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
                     Column(Modifier.padding(16.dp)) {
                         Text("Other V5 modules", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(8.dp))
@@ -144,15 +176,12 @@ fun V4AboutScreen(navController: NavController) {
             }
 
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
                     ListItem(
                         headlineContent = { Text("Authorized / Public Mode") },
                         supportingContent = {
                             Text(
-                                "Use active diagnostics only on authorized systems. OSINT identity links are candidates, not proof of identity. The web-surface check is user-triggered, does not follow redirects automatically and refuses local/private/special-use DNS targets."
+                                "Use active diagnostics only on authorized systems. Identity links are candidates, not proof of identity. File analysis is local. Web-surface checks are user-triggered and refuse local/private/special-use DNS targets."
                             )
                         },
                         leadingContent = { Icon(Icons.Default.Security, null) }
